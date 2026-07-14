@@ -7,6 +7,10 @@ open-weight models behind one API key. This repo collects short, copy-paste
 setup guides for wiring that gateway into the coding assistants people actually
 use, plus a ready-made Pi extension.
 
+> These are best-effort guides. Tools, models, and endpoints change over time,
+> so a step may drift out of date. If you hit an issue or error, ask the UvA or
+> HvA AI chat about it, it is often the fastest way to get an answer.
+
 ## Get an API key
 
 You need a key for the proxy before anything below works.
