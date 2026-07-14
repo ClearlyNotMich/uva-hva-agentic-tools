@@ -9,14 +9,24 @@ plus key (Continue, Cline, Aider, custom scripts, and so on).
 
 ## Setup
 
-1. Set your key as an environment variable so it isn't written into config:
+1. Set your key as an environment variable so it isn't written into config.
+
+   Linux / macOS (add to `~/.bashrc` or `~/.zshrc` to persist):
 
    ```bash
    export UVA_API_KEY="YOUR_PROXY_KEY"          # or HVA_API_KEY
    ```
 
-2. Add the provider to your OpenCode config. Use `~/.config/opencode/opencode.json`
-   for all projects, or `opencode.json` in a project root for just that project:
+   Windows (PowerShell), then restart the shell:
+
+   ```powershell
+   setx UVA_API_KEY "YOUR_PROXY_KEY"
+   ```
+
+2. Add the provider to your OpenCode config. Use the global config for all
+   projects (`~/.config/opencode/opencode.json` on Linux and macOS,
+   `%USERPROFILE%\.config\opencode\opencode.json` on Windows), or `opencode.json`
+   in a project root for just that project:
 
    ```json
    {
@@ -46,11 +56,20 @@ plus key (Continue, Cline, Aider, custom scripts, and so on).
 ## Choosing models to list
 
 `@ai-sdk/openai-compatible` does not auto-discover, so list ids for the
-`models` block yourself:
+`models` block yourself.
+
+Linux / macOS:
 
 ```bash
 curl -s https://llmproxy.uva.nl/v1/models \
   -H "Authorization: Bearer YOUR_PROXY_KEY" | jq -r '.data[].id'
+```
+
+Windows (PowerShell):
+
+```powershell
+(Invoke-RestMethod https://llmproxy.uva.nl/v1/models `
+  -Headers @{ Authorization = "Bearer YOUR_PROXY_KEY" }).data.id
 ```
 
 Add the ones you care about under `models`. You can set a display `name`,

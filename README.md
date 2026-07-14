@@ -39,9 +39,18 @@ too; see [opencode/](opencode/README.md) for the generic pattern.
 
 The line-up changes over time. To list what your key can reach right now:
 
+Linux / macOS:
+
 ```bash
 curl -s https://llmproxy.uva.nl/v1/models \
   -H "Authorization: Bearer YOUR_KEY" | jq '.data[].id'
+```
+
+Windows (PowerShell):
+
+```powershell
+(Invoke-RestMethod https://llmproxy.uva.nl/v1/models `
+  -Headers @{ Authorization = "Bearer YOUR_KEY" }).data.id
 ```
 
 Broadly: OpenAI GPT (`gpt-4o`, `gpt-4.1`, `gpt-5.x`), Anthropic Claude

@@ -41,7 +41,21 @@ per API shape, and mix their models freely.
 ## Setup (CLI)
 
 The Kilo CLI reads provider options from `kilo.jsonc`. Keep the key in an
-environment variable:
+environment variable rather than inline.
+
+Linux / macOS:
+
+```bash
+export UVA_API_KEY="YOUR_PROXY_KEY"
+```
+
+Windows (PowerShell), then restart the shell:
+
+```powershell
+setx UVA_API_KEY "YOUR_PROXY_KEY"
+```
+
+Then reference it from `kilo.jsonc`:
 
 ```jsonc
 {

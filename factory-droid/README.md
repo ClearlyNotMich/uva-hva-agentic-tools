@@ -9,13 +9,23 @@ Based on the official
 
 ## Setup
 
-1. Set your key as an environment variable:
+1. Set your key as an environment variable.
+
+   Linux / macOS (add to `~/.bashrc` or `~/.zshrc` to persist):
 
    ```bash
    export UVA_API_KEY="YOUR_PROXY_KEY"          # or HVA_API_KEY
    ```
 
-2. Add custom models to `~/.factory/settings.json` under `customModels`.
+   Windows (PowerShell), then restart the shell:
+
+   ```powershell
+   setx UVA_API_KEY "YOUR_PROXY_KEY"
+   ```
+
+2. Add custom models under `customModels` in Droid's settings file:
+   `~/.factory/settings.json` on Linux and macOS,
+   `%USERPROFILE%\.factory\settings.json` on Windows.
    Choose the `provider` per model so the right endpoint is used:
 
    ```json
@@ -67,11 +77,20 @@ than `generic-chat-completion-api`.
 
 ## Choosing model ids
 
-List what the proxy serves and copy the ids into the `model` field:
+List what the proxy serves and copy the ids into the `model` field.
+
+Linux / macOS:
 
 ```bash
 curl -s https://llmproxy.uva.nl/v1/models \
   -H "Authorization: Bearer YOUR_PROXY_KEY" | jq -r '.data[].id'
+```
+
+Windows (PowerShell), no extra tools needed:
+
+```powershell
+(Invoke-RestMethod https://llmproxy.uva.nl/v1/models `
+  -Headers @{ Authorization = "Bearer YOUR_PROXY_KEY" }).data.id
 ```
 
 ## Notes

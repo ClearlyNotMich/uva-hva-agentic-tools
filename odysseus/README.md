@@ -15,10 +15,21 @@ for a provider.
 
 From the project [Quick Start](https://github.com/pewdiepie-archdaemon/odysseus):
 
+Linux / macOS:
+
 ```bash
 git clone https://github.com/pewdiepie-archdaemon/odysseus.git
 cd odysseus
 cp .env.example .env
+docker compose up -d --build
+```
+
+Windows (PowerShell), with Docker Desktop running:
+
+```powershell
+git clone https://github.com/pewdiepie-archdaemon/odysseus.git
+cd odysseus
+Copy-Item .env.example .env
 docker compose up -d --build
 ```
 
@@ -69,9 +80,18 @@ strong models stay one click away.
 
 To see everything your key can reach (the list changes over time):
 
+Linux / macOS:
+
 ```bash
 curl -s https://llmproxy.uva.nl/v1/models \
   -H "Authorization: Bearer YOUR_PROXY_KEY" | jq -r '.data[].id'
+```
+
+Windows (PowerShell):
+
+```powershell
+(Invoke-RestMethod https://llmproxy.uva.nl/v1/models `
+  -Headers @{ Authorization = "Bearer YOUR_PROXY_KEY" }).data.id
 ```
 
 ## Notes

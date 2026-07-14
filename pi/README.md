@@ -108,25 +108,6 @@ Each key is a model id; each value may set any of `reasoning`,
 `defaultThinkingLevel` (`off`/`low`/`medium`/`high`), `input`, `contextWindow`,
 `maxTokens`, `vision`, `name`, `cost`, `thinkingLevelMap`.
 
-## What it fixes
-
-The proxy speaks the OpenAI Responses API (`/v1/responses`), and reasoning
-models require `reasoning.effort`, which the proxy only accepts there, not on
-`/v1/chat/completions`. But on the Responses API this proxy has two rough edges:
-
-- Empty tool turns. When tool definitions are present (i.e. every agent
-  turn) it collapses the SSE stream to a single terminal `response.completed`
-  event and drops the incremental deltas, so Pi's built-in parser builds an
-  empty reply with no error. This extension reconciles the terminal
-  `response.output[]` so nothing is lost.
-- Gateway 504 on long reasoning. Reasoning turns buffer server-side with no
-  interim bytes, so streaming them can trip an nginx 504. Those turns are
-  reissued via `background:true` + polling, where each request is short and the
-  timeout can't fire.
-
-A plain `openai-responses` provider in `models.json` hits both. This extension
-is the fix, and adds `/login`, model auto-discovery, and the thinking defaults.
-
 ## How it works
 
 For each turn the custom stream handler:

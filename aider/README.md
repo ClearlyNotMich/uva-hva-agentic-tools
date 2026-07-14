@@ -41,11 +41,20 @@ proxy is a natural fit.
 
 ## Choosing a model
 
-List available ids and prefix the one you want with `openai/`:
+List available ids and prefix the one you want with `openai/`.
+
+Linux / macOS:
 
 ```bash
 curl -s https://llmproxy.uva.nl/v1/models \
   -H "Authorization: Bearer YOUR_PROXY_KEY" | jq -r '.data[].id'
+```
+
+Windows (PowerShell):
+
+```powershell
+(Invoke-RestMethod https://llmproxy.uva.nl/v1/models `
+  -Headers @{ Authorization = "Bearer YOUR_PROXY_KEY" }).data.id
 ```
 
 The `openai/` prefix tells aider to use the OpenAI-compatible path against
