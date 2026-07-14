@@ -9,11 +9,17 @@
     "pi-provider",
     "pi-coding-agent",
     "uva",
+    "hva",
     "litellm",
     "openai-responses",
     "llm-provider"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ClearlyNotMich/uva-hva-ai-coding.git",
+    "directory": "pi"
+  },
   "type": "module",
   "files": [
     "index.ts",
