@@ -6,8 +6,9 @@ exposes that API natively (`/v1/messages`), so this is the easiest setup of
 all: two environment variables, no config files, no extension.
 
 This path serves Claude models (`claude-sonnet`, `claude-opus`,
-`claude-haiku`). For GPT models, use [Pi](../pi/README.md) or
-[VS Code](./vscode.md) instead.
+`claude-haiku`). To drive GPT or Qwen models from Claude Code, add a translation
+proxy: see [9router.md](./9router.md). You can also use [Pi](../pi/README.md) or
+[VS Code](../vscode/README.md) for non-Claude models.
 
 ## Setup
 
@@ -58,9 +59,10 @@ export ANTHROPIC_MODEL="claude-sonnet-4.5"
   turns, `reasoning_effort` rejections) apply on this path.
 - Thinking: Claude's extended thinking works through the proxy. Use Claude
   Code's normal thinking controls.
-- GPT models: not reachable this way. Claude Code only speaks the Anthropic
-  API; a GPT model would need an Anthropic-to-OpenAI translation layer. Use
-  [Pi](../pi/README.md) or [VS Code](./vscode.md) for GPT.
+- GPT / Qwen models: not reachable on this direct path. Claude Code only
+  speaks the Anthropic API, so a non-Claude model needs an Anthropic-to-OpenAI
+  translation layer. Add one with [9router.md](./9router.md), or use
+  [Pi](../pi/README.md) or [VS Code](../vscode/README.md) instead.
 - Key handling: `ANTHROPIC_AUTH_TOKEN` is your proxy key. Prefer setting it
   as a user environment variable over hard-coding it in scripts.
 
