@@ -27,8 +27,17 @@ You need Pi installed and a UvA/HvA proxy API key.
 
 Pick one:
 
-- Load it always: clone the repo and add the `pi/` folder to
-  `~/.pi/agent/settings.json`:
+- From npm (easiest): add `"npm:pi-uva-hva"` to the `packages` array in
+  `~/.pi/agent/settings.json` (or run `pi install npm:pi-uva-hva`). Pi installs
+  it on the next launch, no clone needed:
+  ```jsonc
+  {
+    "packages": [
+      "npm:pi-uva-hva"
+    ]
+  }
+  ```
+- From a local clone: clone the repo and point at the `pi/` folder instead:
   ```jsonc
   {
     "packages": [
