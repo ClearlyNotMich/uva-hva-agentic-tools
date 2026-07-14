@@ -156,6 +156,146 @@ them.
 - Imports only the extension-facing `@earendil-works/pi-ai` surface, so it keeps
   working across Pi updates (it does not patch `node_modules`).
 
+## Recommended extensions
+
+Pi becomes far more capable with a few extensions. These are the ones I run
+alongside this provider — grouped by what they do, with install commands below.
+
+### Context, memory & compaction
+
+| Extension | What it does |
+| --- | --- |
+| [pi-lean-ctx](https://leanctx.com) | Routes `bash`/`read`/`grep`/`find`/`ls` through lean-ctx for big token savings, plus an embedded MCP bridge. |
+| [context-mode](https://github.com/mksglu/context-mode) | Offloads large tool/command output into a sandbox so it never floods your context window. |
+| [pi-smart-compact](https://github.com/alpertarhan/pi-smart-compact) | Verification-oriented smart compaction — deterministic extraction, synthesis, and metrics. |
+| [gentle-engram](https://github.com/Gentleman-Programming/engram) | Persistent memory shared across sessions, compactions, and MCP agents. |
+
+### Planning, workflows & subagents
+
+| Extension | What it does |
+| --- | --- |
+| [@juicesharp/rpiv-pi](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-pi) | Skill-based dev workflow: discover → research → design → plan → implement → validate → review. |
+| [pi-code-planner](https://github.com/m62624/pi-code-planner) | Structured planning, TDD, and Git worktrees for local coding agents. |
+| [@gotgenes/pi-subagents](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents) | In-process sub-agent core with a typed API and lifecycle events. |
+| [@ifi/oh-pi-ant-colony](https://github.com/ifiokjr/oh-pi/tree/main/packages/ant-colony) | Autonomous multi-agent swarm with adaptive concurrency. |
+| [@quintinshaw/pi-dynamic-workflows](https://github.com/QuintinShaw/pi-dynamic-workflows) | Fan a task across hundreds of subagents with real model routing and cost accounting. |
+| [@juicesharp/rpiv-workflow](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-workflow) | Chain skills into typed multi-stage workflows with audited state. |
+| [@juicesharp/rpiv-todo](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-todo) | A live todo overlay for the model that survives `/reload` and compaction. |
+
+### Providers & models
+
+| Extension | What it does |
+| --- | --- |
+| [pi-provider-kimi-code](https://github.com/Leechael/pi-provider-kimi-code) | Use Kimi Code models in Pi (the `/login` pattern this extension borrows). |
+| [pi-multi-account](https://github.com/Sarrius/pi-multi-account) | Automatic multi-account failover & rotation across Anthropic, OpenAI, Qwen, Ollama. |
+| [glm-vision](https://www.npmjs.com/package/glm-vision) | Gives non-vision GLM models (z.ai) image understanding via GLM-4.6V. |
+
+### Tools & UX
+
+| Extension | What it does |
+| --- | --- |
+| [@juicesharp/rpiv-web-tools](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-web-tools) | Web search + fetch for the model with pluggable providers (Brave, Tavily, Exa, …). |
+| [pi-mcp-adapter](https://github.com/nicobailon/pi-mcp-adapter) | Connect any MCP (Model Context Protocol) server to Pi. |
+| [@amaster.ai/pi-computer-use](https://github.com/TGYD-helige/pi) | Desktop automation via `computer_use_*` tools. |
+| [pi-image-paste](https://github.com/tuanhung303/pi-image-paste) | Turns pasted image paths into first-class image attachments. |
+| [@trevonistrevon/pi-loop](https://github.com/trvon/pi-loop) | Cron/event re-wake loops and background process monitoring. |
+| [@juicesharp/rpiv-ask-user-question](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-ask-user-question) | Lets the model ask you a structured, typed questionnaire instead of guessing. |
+| [@juicesharp/rpiv-advisor](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-advisor) | A second opinion the model can request from a stronger reviewer model. |
+| [@juicesharp/rpiv-args](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-args) | `$1` / `$ARGUMENTS` placeholders and shell substitution in skills. |
+| [@juicesharp/rpiv-i18n](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-i18n) | Localization foundation for the `rpiv-*` skills (`/languages`, `--locale`). |
+
+### Code quality
+
+| Extension | What it does |
+| --- | --- |
+| [pi-simplify](https://github.com/MattDevy/pi-extensions/tree/main/packages/pi-simplify) | Reviews recently changed code for clarity, consistency, and maintainability. |
+| [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) | Optimizes RTK command rewriting and tool-output compaction. |
+
+### Install them
+
+Pi auto-installs anything listed in the `packages` array of
+`~/.pi/agent/settings.json` on the next launch — no manual `npm install`.
+
+**All at once** — merge this into your `packages` array (keep any entries you
+already have), then restart Pi:
+
+```jsonc
+{
+  "packages": [
+    "npm:pi-lean-ctx",
+    "npm:context-mode",
+    "npm:pi-smart-compact",
+    "npm:gentle-engram",
+    "npm:@juicesharp/rpiv-pi",
+    "npm:pi-code-planner",
+    "npm:@gotgenes/pi-subagents",
+    "npm:@ifi/oh-pi-ant-colony",
+    "npm:@quintinshaw/pi-dynamic-workflows",
+    "npm:@juicesharp/rpiv-workflow",
+    "npm:@juicesharp/rpiv-todo",
+    "npm:pi-provider-kimi-code",
+    "npm:pi-multi-account",
+    "npm:glm-vision",
+    "npm:@juicesharp/rpiv-web-tools",
+    "npm:pi-mcp-adapter",
+    "npm:@amaster.ai/pi-computer-use",
+    "npm:pi-image-paste",
+    "npm:@trevonistrevon/pi-loop",
+    "npm:@juicesharp/rpiv-ask-user-question",
+    "npm:@juicesharp/rpiv-advisor",
+    "npm:@juicesharp/rpiv-args",
+    "npm:@juicesharp/rpiv-i18n",
+    "npm:pi-simplify",
+    "npm:pi-rtk-optimizer"
+  ]
+}
+```
+
+**One by one** — add a single line to the same `packages` array and restart Pi.
+Each entry is just `"npm:<name>"`, e.g.:
+
+```jsonc
+"packages": [
+  "npm:pi-lean-ctx"
+]
+```
+
+### Setup notes (extensions with a background DB or service)
+
+Most of these are pure extensions that work the moment they're in `packages`. A
+few run a background database or service and need one extra thing to work on a
+single install:
+
+- **Node ≥ 22.5.0 — required by `context-mode`.** It stores its knowledge base in
+  SQLite and relies on Node's built-in `node:sqlite` (older Node falls back to a
+  native module that can crash). Check with `node -v`. Its `postinstall`
+  auto-wires the Pi hooks and heals the native binding, so no manual setup is
+  needed — just verify afterward with `/context-mode:ctx-doctor` (or
+  `npx context-mode doctor`). If an install ever complains about
+  `better-sqlite3`, upgrading Node to 22.5+ is the fix.
+
+- **`gentle-engram` needs the Engram backend.** The npm package is only the Pi
+  bridge — persistence is handled by a separate `engram` binary that it launches
+  as an MCP server. Install Engram from
+  [Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram)
+  and make sure `engram` is on your `PATH` (or set `ENGRAM_BIN`); otherwise the
+  memory tools load but nothing is saved. Also keep only **one** engram entry in
+  `packages` — `npm:gentle-engram` — not a second pinned copy like
+  `npm:gentle-engram@0.1.8`.
+
+- **`pi-lean-ctx` installs a shell allowlist.** It routes `bash`/`read`/`grep`/
+  `find`/`ls` through lean-ctx (big token savings) and runs an embedded MCP
+  bridge by default. It vendors its own binary — no separate install — but its
+  security allowlist can block some shell commands (e.g. `node -e`, certain glob
+  or command-substitution patterns). If a command is blocked, allow it with
+  `lean-ctx allow <cmd>`, edit `~/.config/lean-ctx/config.toml`, or set
+  `LEAN_CTX_ALLOWLIST_WARN_ONLY=1` to downgrade blocks to warnings.
+
+> Some of these overlap in purpose (multiple planners/workflow engines, several
+> compaction strategies, and both `context-mode` and `pi-lean-ctx` wrap tool
+> output). Start with the context/memory group, then add planning and tools as
+> you need them rather than enabling all 25 at once.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
