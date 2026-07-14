@@ -29,12 +29,21 @@
  *      request params (full message + tool conversion, reasoning, caching) via
  *      an `onPayload` hook that captures the params and throws BEFORE the
  *      network call — so nothing extra is billed.
- *   2. Reissues that request NON-STREAMING (`stream:false`) — which this proxy
- *      returns complete and correct — and synthesizes Pi's content events from
- *      `response.output[]`.
+ *   2. Reissues that request itself and synthesizes Pi's content events,
+ *      reconciling the incremental SSE events with the terminal
+ *      `response.output[]` so the collapsed tool call is never lost.
  *
- * Trade-off: UvA replies are non-streaming (the answer appears at once instead
- * of token-by-token) on tool turns. Plain turns (no tools) still stream.
+ * Two dispatch paths keep it reliable:
+ *   - Non-reasoning turns STREAM (`stream:true`). Bytes flow, so the nginx
+ *     gateway read-timeout keeps resetting and the reply is token-by-token.
+ *   - Reasoning turns (reasoning.effort low/medium/high) use BACKGROUND + POLL
+ *     (`background:true` + `GET /responses/{id}`). The model can buffer its
+ *     whole reasoning phase with zero interim bytes without ever tripping a
+ *     504, because each HTTP request is short. A streaming turn that still hits
+ *     a gateway 5xx before any output falls back to this path automatically.
+ *
+ * Trade-off: reasoning replies are not token-by-token (they appear at once on
+ * completion); plain turns stream normally.
  *
  * Config (environment variables)
  * ------------------------------
@@ -123,6 +132,16 @@ const REASONING_THINKING_MAP = {
   max: null,
 } as const;
 
+// Which models actually support the OpenAI Responses API on this proxy. The
+// rest (gpt-oss, Mistral, Qwen, ... — open-weight vLLM deployments) 404 on
+// /v1/responses and must use /v1/chat/completions instead. OpenAI GPT-4/5,
+// the o-series, Claude (Anthropic), and Azure model-router speak Responses.
+const RESPONSES_CAPABLE = /^(gpt-4|gpt-5|o[134]([-_]|$)|claude|model-router)/i;
+
+function apiForModel(id: string): string {
+  return RESPONSES_CAPABLE.test(id) ? CUSTOM_API : "openai-completions";
+}
+
 function resolveCaps(id: string): Caps {
   for (const { re, caps } of CAPS) if (re.test(id)) return caps;
   // Unknown / future model: infer conservatively.
@@ -134,11 +153,16 @@ function resolveCaps(id: string): Caps {
 function buildModelDef(id: string, overrides: Record<string, any>) {
   const caps = resolveCaps(id);
   const ov = overrides[id] || {};
-  const reasoning = ov.reasoning ?? caps.reasoning;
+  const api = ov.api || apiForModel(id);
+  const isResponses = api === CUSTOM_API;
+  // Reasoning (reasoning.effort) is only wired up on the Responses fix path.
+  // Chat-completions models are registered as plain chat for reliability.
+  const reasoning = ov.reasoning ?? (isResponses ? caps.reasoning : false);
   const vision = ov.vision ?? caps.vision;
   return {
     id,
     name: ov.name || `${id} (UvA)`,
+    api,
     reasoning,
     input: (ov.input as string[]) || (vision ? ["text", "image"] : ["text"]),
     cost: ov.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
@@ -235,46 +259,60 @@ function captureParams(builtin: any, model: any, context: any, options: any): Pr
   });
 }
 
-/** Emit Pi content events from a non-streaming Responses `output[]`. */
-function emitFromOutput(out: any, output: any, data: any): void {
-  const items = Array.isArray(data?.output) ? data.output : [];
-  for (const item of items) {
-    if (item?.type === "reasoning") {
-      const thinking =
-        (item.summary && item.summary.map((s: any) => s?.text || "").join("\n\n")) ||
-        (item.content && item.content.map((c: any) => c?.text || "").join("\n\n")) ||
-        "";
-      const block: any = { type: "thinking", thinking, thinkingSignature: JSON.stringify(item) };
-      output.content.push(block);
-      const i = output.content.length - 1;
-      out.push({ type: "thinking_start", contentIndex: i, partial: output });
-      if (thinking) out.push({ type: "thinking_delta", contentIndex: i, delta: thinking, partial: output });
-      out.push({ type: "thinking_end", contentIndex: i, content: thinking, partial: output });
-    } else if (item?.type === "message") {
-      const parts = Array.isArray(item.content) ? item.content : [];
-      const text = parts
-        .map((c: any) => (c?.type === "output_text" ? c.text || "" : c?.type === "refusal" ? c.refusal || "" : ""))
-        .join("");
-      const block: any = { type: "text", text, textSignature: encodeTextSignatureV1(item.id, item.phase ?? undefined) };
-      output.content.push(block);
-      const i = output.content.length - 1;
-      out.push({ type: "text_start", contentIndex: i, partial: output });
-      if (text) out.push({ type: "text_delta", contentIndex: i, delta: text, partial: output });
-      out.push({ type: "text_end", contentIndex: i, content: text, partial: output });
-    } else if (item?.type === "function_call") {
-      let args: any = {};
-      try {
-        args = JSON.parse(item.arguments || "{}");
-      } catch {
-        args = {};
-      }
-      const block: any = { type: "toolCall", id: `${item.call_id}|${item.id}`, name: item.name, arguments: args };
-      output.content.push(block);
-      const i = output.content.length - 1;
-      out.push({ type: "toolcall_start", contentIndex: i, partial: output });
-      out.push({ type: "toolcall_end", contentIndex: i, toolCall: block, partial: output });
+/** Emit Pi content events for a single Responses `output[]` item. */
+function emitOneItem(out: any, output: any, item: any): void {
+  if (item?.type === "reasoning") {
+    const thinking =
+      (item.summary && item.summary.map((s: any) => s?.text || "").join("\n\n")) ||
+      (item.content && item.content.map((c: any) => c?.text || "").join("\n\n")) ||
+      "";
+    const block: any = { type: "thinking", thinking, thinkingSignature: JSON.stringify(item) };
+    output.content.push(block);
+    const i = output.content.length - 1;
+    out.push({ type: "thinking_start", contentIndex: i, partial: output });
+    if (thinking) out.push({ type: "thinking_delta", contentIndex: i, delta: thinking, partial: output });
+    out.push({ type: "thinking_end", contentIndex: i, content: thinking, partial: output });
+  } else if (item?.type === "message") {
+    const parts = Array.isArray(item.content) ? item.content : [];
+    const text = parts
+      .map((c: any) => (c?.type === "output_text" ? c.text || "" : c?.type === "refusal" ? c.refusal || "" : ""))
+      .join("");
+    const block: any = { type: "text", text, textSignature: encodeTextSignatureV1(item.id, item.phase ?? undefined) };
+    output.content.push(block);
+    const i = output.content.length - 1;
+    out.push({ type: "text_start", contentIndex: i, partial: output });
+    if (text) out.push({ type: "text_delta", contentIndex: i, delta: text, partial: output });
+    out.push({ type: "text_end", contentIndex: i, content: text, partial: output });
+  } else if (item?.type === "function_call") {
+    let args: any = {};
+    try {
+      args = JSON.parse(item.arguments || "{}");
+    } catch {
+      args = {};
     }
-    // other item types (e.g. bare encrypted reasoning) are ignored
+    const block: any = { type: "toolCall", id: `${item.call_id}|${item.id}`, name: item.name, arguments: args };
+    output.content.push(block);
+    const i = output.content.length - 1;
+    out.push({ type: "toolcall_start", contentIndex: i, partial: output });
+    out.push({ type: "toolcall_end", contentIndex: i, toolCall: block, partial: output });
+  }
+  // other item types (e.g. bare encrypted reasoning) are ignored
+}
+
+/**
+ * Reconcile the terminal `output[]` against what was already emitted
+ * incrementally. Any item whose id was NOT seen in the incremental event
+ * stream is emitted now. This covers:
+ *   - full collapse (no incremental events)  -> emit everything
+ *   - partial collapse (e.g. text streamed but the tool call only appears in
+ *     the terminal payload, as Anthropic/Bedrock does) -> emit the missing item
+ */
+function reconcileTerminal(out: any, output: any, terminal: any, seenIds: Set<string>): void {
+  const items = Array.isArray(terminal?.output) ? terminal.output : [];
+  for (const item of items) {
+    const id = item?.id;
+    if (id && seenIds.has(id)) continue;
+    emitOneItem(out, output, item);
   }
 }
 
@@ -297,18 +335,347 @@ function applyUsage(output: any, data: any, model: any): void {
   }
 }
 
-/** The replacement streamSimple for UvA models. */
-function uvaStreamSimple(model: any, context: any, options: any): any {
-  const builtin = getApiProvider(BASE_API);
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-  // No tools in this request => the proxy streams fine. Delegate to the built-in
-  // handler for real token-by-token streaming. (context.tools is exactly what
-  // Pi's buildParams checks to decide whether to send tool definitions.)
-  const hasTools = Array.isArray(context?.tools) && context.tools.length > 0;
-  if (hasTools === false && builtin) {
-    return builtin.streamSimple({ ...model, api: BASE_API }, context, options);
+// OpenAI-native families (Azure backend) accept OpenAI-only request params like
+// `prompt_cache_key`. Non-OpenAI backends behind the proxy (Anthropic/Bedrock,
+// Gemini/Vertex, Mistral, Qwen, ...) reject them, e.g.
+//   "prompt_cache_key: Extra inputs are not permitted"
+// Keep the param only for OpenAI-native ids; strip it everywhere else (the only
+// cost is losing prompt caching on backends that would have accepted it).
+const OPENAI_NATIVE = /^(gpt-|o[134]([-_]|$)|gpt-oss|model-router)/i;
+
+function sanitizeParamsForModel(modelId: string, params: any): any {
+  if (OPENAI_NATIVE.test(modelId)) return params;
+  const p = { ...params };
+  delete p.prompt_cache_key;
+  delete p.prompt_cache_retention;
+  return p;
+}
+
+/**
+ * Translate one Responses SSE event into Pi events + block state.
+ * Handles the full incremental event set (good streaming case) and records the
+ * terminal `response.completed` payload (whose `output[]` is harvested by the
+ * caller when the proxy sent no incremental events — the tools-collapse case).
+ */
+function handleSseEvent(
+  evt: any,
+  out: any,
+  output: any,
+  slots: Map<number, any>,
+  seenIds: Set<string>,
+  setTerminal: (r: any) => void,
+): void {
+  const t = evt?.type;
+  if (t === "response.output_item.added") {
+    const item = evt.item;
+    const oi = evt.output_index;
+    if (item?.id) seenIds.add(item.id);
+    if (item?.type === "reasoning") {
+      const block: any = { type: "thinking", thinking: "" };
+      output.content.push(block);
+      const ci = output.content.length - 1;
+      slots.set(oi, { type: "thinking", block, ci });
+      out.push({ type: "thinking_start", contentIndex: ci, partial: output });
+    } else if (item?.type === "message") {
+      const block: any = { type: "text", text: "" };
+      output.content.push(block);
+      const ci = output.content.length - 1;
+      slots.set(oi, { type: "text", block, ci });
+      out.push({ type: "text_start", contentIndex: ci, partial: output });
+    } else if (item?.type === "function_call") {
+      const block: any = {
+        type: "toolCall",
+        id: `${item.call_id}|${item.id}`,
+        name: item.name,
+        arguments: {},
+        partialJson: item.arguments || "",
+      };
+      output.content.push(block);
+      const ci = output.content.length - 1;
+      slots.set(oi, { type: "toolCall", block, ci });
+      out.push({ type: "toolcall_start", contentIndex: ci, partial: output });
+    }
+  } else if (t === "response.output_text.delta") {
+    const slot = slots.get(evt.output_index);
+    if (slot?.type === "text") {
+      slot.block.text += evt.delta || "";
+      out.push({ type: "text_delta", contentIndex: slot.ci, delta: evt.delta || "", partial: output });
+    }
+  } else if (t === "response.reasoning_summary_text.delta") {
+    const slot = slots.get(evt.output_index);
+    if (slot?.type === "thinking") {
+      slot.block.thinking += evt.delta || "";
+      out.push({ type: "thinking_delta", contentIndex: slot.ci, delta: evt.delta || "", partial: output });
+    }
+  } else if (t === "response.function_call_arguments.delta") {
+    const slot = slots.get(evt.output_index);
+    if (slot?.type === "toolCall") {
+      slot.block.partialJson = (slot.block.partialJson || "") + (evt.delta || "");
+      out.push({ type: "toolcall_delta", contentIndex: slot.ci, delta: evt.delta || "", partial: output });
+    }
+  } else if (t === "response.output_item.done") {
+    const item = evt.item;
+    if (item?.id) seenIds.add(item.id);
+    const slot = slots.get(evt.output_index);
+    if (item?.type === "reasoning" && slot?.type === "thinking") {
+      const summary =
+        (item.summary && item.summary.map((s: any) => s?.text || "").join("\n\n")) ||
+        (item.content && item.content.map((c: any) => c?.text || "").join("\n\n")) ||
+        slot.block.thinking;
+      slot.block.thinking = summary;
+      slot.block.thinkingSignature = JSON.stringify(item);
+      out.push({ type: "thinking_end", contentIndex: slot.ci, content: slot.block.thinking, partial: output });
+      slots.delete(evt.output_index);
+    } else if (item?.type === "message" && slot?.type === "text") {
+      const text =
+        (item.content &&
+          item.content
+            .map((c: any) => (c?.type === "output_text" ? c.text || "" : c?.type === "refusal" ? c.refusal || "" : ""))
+            .join("")) ||
+        slot.block.text;
+      slot.block.text = text;
+      slot.block.textSignature = encodeTextSignatureV1(item.id, item.phase ?? undefined);
+      out.push({ type: "text_end", contentIndex: slot.ci, content: text, partial: output });
+      slots.delete(evt.output_index);
+    } else if (item?.type === "function_call" && slot?.type === "toolCall") {
+      let args: any = {};
+      try {
+        args = JSON.parse(item.arguments || slot.block.partialJson || "{}");
+      } catch {
+        args = {};
+      }
+      slot.block.arguments = args;
+      delete slot.block.partialJson;
+      out.push({ type: "toolcall_end", contentIndex: slot.ci, toolCall: slot.block, partial: output });
+      slots.delete(evt.output_index);
+    }
+  } else if (t === "response.completed" || t === "response.incomplete") {
+    setTerminal(evt.response);
+  } else if (t === "response.failed") {
+    const e = evt.response?.error;
+    throw new Error(`openai-responses-uva: ${e?.code || "failed"}: ${e?.message || "no message"}`);
+  } else if (t === "error") {
+    throw new Error(`openai-responses-uva: stream error: ${evt.message || evt.code || "unknown"}`);
+  }
+}
+
+/**
+ * One streaming attempt. Streaming keeps the gateway connection alive (bytes
+ * flow) so slow generations don't hit an nginx 504. `state.started` is set once
+ * we begin emitting, so the caller only retries failures that happen before any
+ * output was produced.
+ */
+async function attemptStream(
+  url: string,
+  apiKey: string,
+  body: any,
+  out: any,
+  output: any,
+  model: any,
+  signal: any,
+  onResponse: any,
+  state: { started: boolean },
+): Promise<void> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
+    body: JSON.stringify(body),
+    ...(signal ? { signal } : {}),
+  });
+  try {
+    await onResponse?.({ status: res.status, headers: {} }, model);
+  } catch {
+    /* ignore */
+  }
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    const err: any = new Error(`openai-responses-uva: HTTP ${res.status}: ${text.slice(0, 200).replace(/\s+/g, " ")}`);
+    err.status = res.status;
+    throw err;
   }
 
+  state.started = true;
+  out.push({ type: "start", partial: output });
+
+  const reader = (res.body as any).getReader();
+  const decoder = new TextDecoder();
+  const slots = new Map<number, any>();
+  const seenIds = new Set<string>();
+  let terminal: any = null;
+  let buffer = "";
+
+  const drainChunk = (chunk: string) => {
+    for (const line of chunk.split("\n")) {
+      const s = line.trim();
+      if (!s.startsWith("data:")) continue;
+      const payload = s.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      let evt: any;
+      try {
+        evt = JSON.parse(payload);
+      } catch {
+        continue;
+      }
+      handleSseEvent(evt, out, output, slots, seenIds, (r) => (terminal = r));
+    }
+  };
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let i: number;
+    while ((i = buffer.indexOf("\n\n")) !== -1) {
+      drainChunk(buffer.slice(0, i));
+      buffer = buffer.slice(i + 2);
+    }
+  }
+  if (buffer.trim()) drainChunk(buffer);
+
+  // Close any slots the proxy left open without an output_item.done.
+  for (const slot of slots.values()) {
+    if (slot.type === "text") {
+      out.push({ type: "text_end", contentIndex: slot.ci, content: slot.block.text, partial: output });
+    } else if (slot.type === "thinking") {
+      out.push({ type: "thinking_end", contentIndex: slot.ci, content: slot.block.thinking, partial: output });
+    } else if (slot.type === "toolCall") {
+      try {
+        slot.block.arguments = JSON.parse(slot.block.partialJson || "{}");
+      } catch {
+        /* keep {} */
+      }
+      delete slot.block.partialJson;
+      out.push({ type: "toolcall_end", contentIndex: slot.ci, toolCall: slot.block, partial: output });
+    }
+  }
+  slots.clear();
+
+  // Emit any terminal output[] items that never arrived as incremental events
+  // (full or partial collapse — e.g. Anthropic/Bedrock streams text but delivers
+  // the tool call only in the terminal payload).
+  if (terminal) {
+    reconcileTerminal(out, output, terminal, seenIds);
+    applyUsage(output, terminal, model);
+    output.stopReason = mapStopReason(terminal.status);
+  }
+}
+
+/**
+ * Background + poll path. The POST returns immediately with a stored response
+ * id (status `queued`/`in_progress`), then we poll `GET /responses/{id}` until
+ * it finishes. Because every HTTP request is short, the nginx gateway
+ * read-timeout can never fire — this is the reliable path for long reasoning
+ * turns that otherwise buffer server-side and 504.
+ *
+ * Trade-off: no token-by-token streaming (the proxy delivers background results
+ * only as a single terminal payload), so the reply appears at once on completion.
+ */
+async function runBackgroundPoll(
+  url: string,
+  apiKey: string,
+  params: any,
+  out: any,
+  output: any,
+  model: any,
+  signal: any,
+  onResponse: any,
+  state: { started: boolean },
+): Promise<void> {
+  const authHeaders = { Authorization: `Bearer ${apiKey}` };
+  const body = sanitizeParamsForModel(model.id, { ...params, background: true, store: true, stream: false });
+
+  // Enqueue (retry a couple times on gateway 5xx — the POST returns fast, so
+  // this rarely trips).
+  let data: any = null;
+  for (let attempt = 0; ; attempt++) {
+    if (signal?.aborted) throw new Error("openai-responses-uva: aborted");
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
+    });
+    try {
+      await onResponse?.({ status: res.status, headers: {} }, model);
+    } catch {
+      /* ignore */
+    }
+    const text = await res.text();
+    if (res.ok) {
+      try {
+        data = JSON.parse(text);
+      } catch {
+        throw new Error(`openai-responses-uva: non-JSON enqueue response: ${text.slice(0, 200)}`);
+      }
+      break;
+    }
+    const gateway = res.status >= 500 && res.status < 600;
+    if (gateway && attempt < 2 && !signal?.aborted) {
+      await sleep(1000 * (attempt + 1));
+      continue;
+    }
+    throw new Error(`openai-responses-uva: HTTP ${res.status}: ${text.slice(0, 200).replace(/\s+/g, " ")}`);
+  }
+  const id = data?.id;
+  if (!id) throw new Error("openai-responses-uva: background response missing id");
+
+  state.started = true;
+  out.push({ type: "start", partial: output });
+
+  // Poll until a terminal status. Every GET is short, so no gateway timeout.
+  const getUrl = `${url}/${encodeURIComponent(id)}`;
+  const deadline = Date.now() + 15 * 60 * 1000; // 15 min hard cap
+  let delay = 1500;
+  let getFails = 0;
+  let terminal: any = null;
+  while (true) {
+    if (signal?.aborted) throw new Error("openai-responses-uva: aborted");
+    await sleep(delay);
+    let g: any;
+    try {
+      g = await fetch(getUrl, { headers: authHeaders, ...(signal ? { signal } : {}) });
+    } catch (e: any) {
+      if (signal?.aborted) throw new Error("openai-responses-uva: aborted");
+      if (++getFails > 5) throw e;
+      continue;
+    }
+    if (!g.ok) {
+      if (++getFails > 5) {
+        const t = await g.text().catch(() => "");
+        throw new Error(`openai-responses-uva: poll HTTP ${g.status}: ${t.slice(0, 160).replace(/\s+/g, " ")}`);
+      }
+      continue;
+    }
+    getFails = 0;
+    let gd: any;
+    try {
+      gd = await g.json();
+    } catch {
+      continue;
+    }
+    const st = gd?.status;
+    if (st === "completed" || st === "incomplete") {
+      terminal = gd;
+      break;
+    }
+    if (st === "failed" || st === "cancelled") {
+      const e = gd?.error;
+      throw new Error(`openai-responses-uva: background ${st}: ${e?.message || e?.code || "no message"}`);
+    }
+    if (Date.now() > deadline) throw new Error("openai-responses-uva: background poll timed out");
+    delay = Math.min(delay + 500, 3000);
+  }
+
+  // Background responses carry no incremental events — emit the whole output[].
+  reconcileTerminal(out, output, terminal, new Set());
+  applyUsage(output, terminal, model);
+  output.stopReason = mapStopReason(terminal.status);
+}
+
+/** The replacement streamSimple for UvA models. */
+function uvaStreamSimple(model: any, context: any, options: any): any {
   const out = createAssistantMessageEventStream();
   (async () => {
     const output: any = {
@@ -330,6 +697,7 @@ function uvaStreamSimple(model: any, context: any, options: any): any {
       timestamp: Date.now(),
     };
     try {
+      const builtin = getApiProvider(BASE_API);
       if (!builtin) throw new Error("openai-responses-uva: built-in openai-responses handler not available");
 
       const origOnPayload = options?.onPayload;
@@ -344,33 +712,35 @@ function uvaStreamSimple(model: any, context: any, options: any): any {
       if (!apiKey) throw new Error("openai-responses-uva: no API key (set UVA_API_KEY)");
       const url = String(model.baseUrl || BASE_URL).replace(/\/+$/, "") + "/responses";
 
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${apiKey}` },
-        body: JSON.stringify({ ...params, stream: false }),
-        ...(options?.signal ? { signal: options.signal } : {}),
-      });
-      try {
-        await options?.onResponse?.({ status: res.status, headers: {} }, model);
-      } catch {
-        /* ignore */
-      }
-      const bodyText = await res.text();
-      let data: any;
-      try {
-        data = JSON.parse(bodyText);
-      } catch {
-        throw new Error(`openai-responses-uva: non-JSON response (HTTP ${res.status}): ${bodyText.slice(0, 300)}`);
-      }
-      if (!res.ok || data?.error) {
-        const detail = data?.error ? JSON.stringify(data.error) : JSON.stringify(data).slice(0, 400);
-        throw new Error(`openai-responses-uva: HTTP ${res.status}: ${detail}`);
+      const state = { started: false };
+      const effort = params?.reasoning?.effort;
+      // Reasoning turns buffer server-side (the proxy sends no interim bytes
+      // while the model thinks) and can 504 mid-stream. Route them straight to
+      // the background+poll path where every HTTP request is short, so the
+      // gateway timeout cannot fire. Non-reasoning turns (effort "none"/absent)
+      // stream normally for token-by-token output.
+      const preferBackground = typeof effort === "string" && effort !== "none";
+
+      if (preferBackground) {
+        await runBackgroundPoll(url, apiKey, params, out, output, model, options?.signal, options?.onResponse, state);
+      } else {
+        const streamBody = sanitizeParamsForModel(model.id, { ...params, stream: true });
+        try {
+          await attemptStream(url, apiKey, streamBody, out, output, model, options?.signal, options?.onResponse, state);
+        } catch (err: any) {
+          const status: number | undefined = err?.status;
+          const gateway = status === undefined || (status >= 500 && status < 600);
+          // Gateway failure before any output = the proxy buffered with no bytes.
+          // Fall back to background+poll (also defeats the 504) instead of
+          // retrying the same doomed stream.
+          if (!state.started && gateway && !options?.signal?.aborted) {
+            await runBackgroundPoll(url, apiKey, params, out, output, model, options?.signal, options?.onResponse, state);
+          } else {
+            throw err;
+          }
+        }
       }
 
-      out.push({ type: "start", partial: output });
-      emitFromOutput(out, output, data);
-      applyUsage(output, data, model);
-      output.stopReason = mapStopReason(data?.status);
       if (output.content.some((b: any) => b.type === "toolCall") && output.stopReason === "stop") {
         output.stopReason = "toolUse";
       }

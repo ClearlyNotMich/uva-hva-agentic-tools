@@ -1,7 +1,7 @@
 {
   "name": "openai-responses-uva",
-  "version": "1.0.0",
-  "description": "Pi coding-agent provider extension for the UvA LiteLLM proxy. Fixes empty output on tool turns (Responses API stream collapses to a terminal event) via a non-streaming reissue, and auto-discovers every model from /v1/models.",
+  "version": "1.1.0",
+  "description": "Pi coding-agent provider extension for the UvA LiteLLM proxy. Fixes empty output on tool turns (Responses API stream collapses to a terminal event), defeats the gateway 504 on long reasoning turns via a background+poll path, and auto-discovers every model from /v1/models.",
   "keywords": [
     "pi",
     "pi-extension",
