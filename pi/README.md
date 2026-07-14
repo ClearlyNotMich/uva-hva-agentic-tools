@@ -188,19 +188,6 @@ These three cover the three layers with one tool each, so nothing overlaps:
 | [pi-smart-compact](https://github.com/alpertarhan/pi-smart-compact) | History | Verification-oriented conversation compaction: deterministic extract, then synthesize, then verify what survived. |
 | [gentle-engram](https://github.com/Gentleman-Programming/engram) | Memory | Persistent memory shared across sessions, compactions, and MCP agents. |
 
-Pick only one tool-output interceptor. `context-mode`,
-[`pi-lean-ctx`](https://leanctx.com),
-[`@hypabolic/pi-hypa`](https://github.com/Hypabolic/Hypa/tree/main/packages/pi-hypa),
-and [`pi-rtk-optimizer`](https://github.com/MasuRii/pi-rtk-optimizer) all sit in
-front of the same shell/tool output, so running several stacks them (double
-compression, competing hooks). `pi-lean-ctx` also installs a shell allowlist that
-can silently block commands like `node`. This setup uses `context-mode`; if you
-prefer one of the others, use it instead of `context-mode`, not alongside it.
-
-Same rule for history compaction: run one owner (`pi-smart-compact` here). It
-hooks Pi's compaction path, so do not pair it with another auto-compaction
-extension.
-
 ### Planning, workflows & subagents
 
 | Extension | What it does |
@@ -311,9 +298,12 @@ single install:
   `packages`: `npm:gentle-engram`, not a second pinned copy like
   `npm:gentle-engram@0.1.8`.
 
-> Some of these overlap in purpose (multiple planners and workflow engines).
-> Start with the context/memory group, then add planning and tools as you need
-> them rather than enabling all of them at once.
+> Some of these overlap in purpose. `rpiv-todo` gives the model its `todo`
+> tracker; `pi-loop` also ships a native `TaskCreate` fallback that only
+> activates when no dedicated task system is present, so it just sits unused
+> beside `todo` (harmless, not a conflict). Several planning and workflow
+> engines overlap too. Start with the context/memory group, then add planning
+> and tools as you need them rather than enabling all of them at once.
 
 ## License
 
