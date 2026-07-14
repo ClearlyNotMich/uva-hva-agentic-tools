@@ -45,11 +45,23 @@
  * Trade-off: reasoning replies are not token-by-token (they appear at once on
  * completion); plain turns stream normally.
  *
- * Config (environment variables)
- * ------------------------------
- *   UVA_API_KEY      required. Your UvA proxy API key.
- *   UVA_BASE_URL     optional. Default: https://llmproxy.uva.nl/v1
- *   UVA_PROVIDER_ID  optional. Default: uva
+ * Connecting
+ * ----------
+ * Run `/login` (choose "UvA / HvA proxy") or `/uva-login`: pick a base URL
+ * (UvA / HvA / custom), paste your API key, and every model is auto-discovered.
+ * The base URL + key are saved to ~/.pi/agent/openai-responses-uva.json so the
+ * next launch reconnects with nothing re-entered. Then pick a model via /models.
+ *
+ * Reasoning models default to thinking ON — `-sol` at high, the rest at medium
+ * (set UVA_NO_AUTO_THINKING=1 to disable this).
+ *
+ * Config (environment variables — all optional; /login is the easy path)
+ * ---------------------------------------------------------------------
+ *   UVA_API_KEY           API key, if you prefer env over /login.
+ *   UVA_BASE_URL          Default: https://llmproxy.uva.nl/v1
+ *   UVA_PROVIDER_ID       Provider id in /models. Default: uva
+ *   UVA_CREDENTIALS_FILE  Override the saved-credentials path.
+ *   UVA_NO_AUTO_THINKING  Set to disable the sol=high / rest=medium defaults.
  *
  * Only imports the aliased root "@earendil-works/pi-ai" (the extension-facing
  * compat surface), so it works under Pi's jiti extension loader.
@@ -61,9 +73,53 @@ import { getApiProvider, createAssistantMessageEventStream, calculateCost } from
 const BASE_API = "openai-responses"; // pristine built-in handler we delegate to
 const CUSTOM_API = "openai-responses-uva"; // our fixed handler is registered under this
 const DEFAULT_BASE_URL = "https://llmproxy.uva.nl/v1";
+const BASE_URL_PRESETS: Record<string, string> = {
+  uva: "https://llmproxy.uva.nl/v1",
+  hva: "https://llmproxy.hva.nl/v1",
+};
 
 const PROVIDER_ID = process.env.UVA_PROVIDER_ID || "uva";
-const BASE_URL = (process.env.UVA_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+
+// Active connection settings. Seeded from env, overridden by saved credentials
+// (from the /login flow) at startup, and updated live on login.
+let activeBaseUrl = (process.env.UVA_BASE_URL || DEFAULT_BASE_URL).replace(/\/+$/, "");
+let activeApiKey: string | undefined = process.env.UVA_API_KEY || process.env.OPENAI_API_KEY;
+
+// Persisted login (base URL + API key) so model discovery works at the next
+// startup with nothing re-entered. Path overridable via UVA_CREDENTIALS_FILE.
+function credsFile(): string {
+  if (process.env.UVA_CREDENTIALS_FILE) return process.env.UVA_CREDENTIALS_FILE;
+  const os = require("node:os");
+  const { join } = require("node:path");
+  return join(os.homedir(), ".pi", "agent", "openai-responses-uva.json");
+}
+
+function loadCreds(): { baseUrl?: string; apiKey?: string } | null {
+  try {
+    const { readFileSync } = require("node:fs");
+    const parsed = JSON.parse(readFileSync(credsFile(), "utf8"));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveCreds(creds: { baseUrl: string; apiKey: string }): void {
+  const { writeFileSync, mkdirSync, chmodSync } = require("node:fs");
+  const { dirname } = require("node:path");
+  const file = credsFile();
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(creds, null, 2));
+  try {
+    chmodSync(file, 0o600); // best-effort owner-only
+  } catch {
+    /* ignore */
+  }
+}
+
+function isSolModel(id: string): boolean {
+  return /(^|[-_])sol($|[-_.])/i.test(id);
+}
 
 // Models that are not chat/response models — never register these.
 const DENY = /embedding|whisper|audio|tts|speech|dall|(^|[-_])image|document-ai|ocr|rerank|moderation|guard|stable-diffusion/i;
@@ -187,11 +243,12 @@ function loadOverrides(): Record<string, any> {
   }
 }
 
-async function discoverModelIds(apiKey: string | undefined): Promise<string[]> {
-  const res = await fetch(`${BASE_URL}/models`, {
+async function discoverModelIds(apiKey: string | undefined, baseUrl: string): Promise<string[]> {
+  const root = baseUrl.replace(/\/+$/, "");
+  const res = await fetch(`${root}/models`, {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
   });
-  if (!res.ok) throw new Error(`GET ${BASE_URL}/models -> HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`GET ${root}/models -> HTTP ${res.status}`);
   const data: any = await res.json();
   const ids = (Array.isArray(data?.data) ? data.data : [])
     .map((m: any) => m?.id)
@@ -708,9 +765,9 @@ function uvaStreamSimple(model: any, context: any, options: any): any {
         if (next !== undefined) params = next;
       }
 
-      const apiKey = options?.apiKey || process.env.UVA_API_KEY || process.env.OPENAI_API_KEY;
-      if (!apiKey) throw new Error("openai-responses-uva: no API key (set UVA_API_KEY)");
-      const url = String(model.baseUrl || BASE_URL).replace(/\/+$/, "") + "/responses";
+      const apiKey = options?.apiKey || activeApiKey || process.env.UVA_API_KEY || process.env.OPENAI_API_KEY;
+      if (!apiKey) throw new Error("openai-responses-uva: no API key (run /login or set UVA_API_KEY)");
+      const url = String(model.baseUrl || activeBaseUrl).replace(/\/+$/, "") + "/responses";
 
       const state = { started: false };
       const effort = params?.reasoning?.effort;
@@ -764,29 +821,150 @@ function uvaStreamSimple(model: any, context: any, options: any): any {
 // Extension entry point
 // ---------------------------------------------------------------------------
 
-export default async function (pi: ExtensionAPI): Promise<void> {
-  const apiKey = process.env.UVA_API_KEY;
-
+/** Discover + build the model list for a given key/base URL (falls back on error). */
+async function buildModels(apiKey: string | undefined, baseUrl: string): Promise<any[]> {
   let ids: string[];
   try {
-    ids = await discoverModelIds(apiKey);
+    ids = await discoverModelIds(apiKey, baseUrl);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[openai-responses-uva] model discovery failed (${msg}); using fallback list.`);
     ids = FALLBACK_MODEL_IDS;
   }
-
   const overrides = loadOverrides();
-  const models = ids
-    .filter((id) => !DENY.test(id))
-    .map((id) => buildModelDef(id, overrides));
+  return ids.filter((id) => !DENY.test(id)).map((id) => buildModelDef(id, overrides));
+}
 
+function registerProviderNow(pi: ExtensionAPI, models: any[], baseUrl: string): void {
   pi.registerProvider(PROVIDER_ID, {
-    name: "UvA (Responses fix)",
-    baseUrl: BASE_URL,
+    name: "UvA / HvA (Responses fix)",
+    baseUrl: baseUrl.replace(/\/+$/, ""),
     apiKey: "$UVA_API_KEY",
     api: CUSTOM_API,
     models,
     streamSimple: uvaStreamSimple as any,
+    oauth: makeOAuth(pi),
+  });
+}
+
+/**
+ * OAuth-shaped config so the connect flow appears under `/login`. It isn't real
+ * OAuth — we reuse the callback prompts to pick a base URL and paste an API key,
+ * then discover models and re-register the provider so `/models` fills in.
+ */
+function makeOAuth(pi: ExtensionAPI) {
+  return {
+    name: "UvA / HvA proxy (paste API key)",
+    async login(callbacks: any): Promise<any> {
+      const choice = await callbacks.onSelect({
+        message: "Which proxy do you want to connect to?",
+        options: [
+          { id: "uva", label: "UvA  —  llmproxy.uva.nl" },
+          { id: "hva", label: "HvA  —  llmproxy.hva.nl" },
+          { id: "custom", label: "Custom base URL…" },
+        ],
+      });
+      if (!choice) throw new Error("login cancelled");
+      let baseUrl = BASE_URL_PRESETS[choice] || DEFAULT_BASE_URL;
+      if (choice === "custom") {
+        const typed = await callbacks.onPrompt({
+          message: "Base URL (include /v1)",
+          placeholder: "https://llmproxy.example.nl/v1",
+        });
+        if (!typed || !typed.trim()) throw new Error("login cancelled");
+        baseUrl = typed.trim();
+      }
+      baseUrl = baseUrl.replace(/\/+$/, "");
+
+      const key = await callbacks.onPrompt({ message: "Paste your API key", placeholder: "sk-…" });
+      if (!key || !key.trim()) throw new Error("login cancelled");
+      const apiKey = key.trim();
+
+      callbacks.onProgress?.("Discovering models…");
+      const ids = await discoverModelIds(apiKey, baseUrl); // throws on a bad key/url -> login fails
+      callbacks.onProgress?.(`Connected — ${ids.length} models available.`);
+
+      saveCreds({ baseUrl, apiKey });
+      activeApiKey = apiKey;
+      activeBaseUrl = baseUrl;
+      registerProviderNow(pi, await buildModels(apiKey, baseUrl), baseUrl);
+
+      return {
+        access: apiKey,
+        refresh: "",
+        expires: Date.now() + 10 * 365 * 24 * 60 * 60 * 1000, // static key: never auto-refresh
+        baseUrl,
+      };
+    },
+    async refreshToken(cred: any): Promise<any> {
+      return cred; // static API key — nothing to refresh
+    },
+    getApiKey(cred: any): string {
+      if (cred?.baseUrl) activeBaseUrl = String(cred.baseUrl).replace(/\/+$/, "");
+      const key = (cred && cred.access) || activeApiKey || "";
+      if (key) activeApiKey = key;
+      return key;
+    },
+    modifyModels(models: any[], cred: any): any[] {
+      const b = (cred?.baseUrl ? String(cred.baseUrl) : activeBaseUrl).replace(/\/+$/, "");
+      return models.map((m) => (m.provider === PROVIDER_ID ? { ...m, baseUrl: b } : m));
+    },
+  };
+}
+
+// Enforce the preferred defaults: thinking ON, sol=high, other reasoning models
+// =medium. Applied whenever a UvA reasoning model becomes active. Disable with
+// UVA_NO_AUTO_THINKING=1.
+function applyThinkingDefault(pi: ExtensionAPI, model: any): void {
+  if (process.env.UVA_NO_AUTO_THINKING) return;
+  if (!model || model.provider !== PROVIDER_ID || !model.reasoning) return;
+  try {
+    pi.setThinkingLevel(isSolModel(model.id) ? "high" : "medium");
+  } catch {
+    /* ignore */
+  }
+}
+
+export default async function (pi: ExtensionAPI): Promise<void> {
+  const creds = loadCreds();
+  if (creds?.baseUrl) activeBaseUrl = String(creds.baseUrl).replace(/\/+$/, "");
+  if (creds?.apiKey) activeApiKey = creds.apiKey;
+
+  registerProviderNow(pi, await buildModels(activeApiKey, activeBaseUrl), activeBaseUrl);
+
+  // Default thinking level (sol=high, rest=medium) on selection and at startup.
+  pi.on("model_select", (event: any) => applyThinkingDefault(pi, event?.model));
+  pi.on("session_start", (_event: any, ctx: any) => applyThinkingDefault(pi, ctx?.model));
+
+  // Named convenience command; the same flow is also reachable via `/login`.
+  pi.registerCommand("uva-login", {
+    description: "Connect a UvA/HvA proxy: pick base URL, paste API key, auto-discover models",
+    handler: async (_args: string, ctx: any) => {
+      if (!ctx.hasUI) {
+        ctx.ui.notify("/uva-login needs interactive UI (or set UVA_API_KEY + UVA_BASE_URL).", "error");
+        return;
+      }
+      const oauth = makeOAuth(pi);
+      try {
+        const cred = await oauth.login({
+          onSelect: (p: any) =>
+            ctx.ui
+              .select(
+                p.message,
+                p.options.map((o: any) => o.label),
+              )
+              .then((label: string | undefined) =>
+                label ? p.options.find((o: any) => o.label === label)?.id : undefined,
+              ),
+          onPrompt: (p: any) => ctx.ui.input(p.message, p.placeholder).then((v: string | undefined) => v ?? ""),
+          onProgress: (m: string) => ctx.ui.notify(m, "info"),
+          onAuth: () => {},
+          onDeviceCode: () => {},
+        });
+        ctx.ui.notify(`Connected to ${cred.baseUrl}. Open /models to pick one.`, "info");
+      } catch (err) {
+        ctx.ui.notify(`Login failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
+    },
   });
 }
