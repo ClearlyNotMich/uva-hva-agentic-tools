@@ -177,7 +177,6 @@ alongside this provider — grouped by what they do, with install commands below
 | [@juicesharp/rpiv-pi](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-pi) | Skill-based dev workflow: discover → research → design → plan → implement → validate → review. |
 | [pi-code-planner](https://github.com/m62624/pi-code-planner) | Structured planning, TDD, and Git worktrees for local coding agents. |
 | [@gotgenes/pi-subagents](https://github.com/gotgenes/pi-packages/tree/main/packages/pi-subagents) | In-process sub-agent core with a typed API and lifecycle events. |
-| [@ifi/oh-pi-ant-colony](https://github.com/ifiokjr/oh-pi/tree/main/packages/ant-colony) | Autonomous multi-agent swarm with adaptive concurrency. |
 | [@quintinshaw/pi-dynamic-workflows](https://github.com/QuintinShaw/pi-dynamic-workflows) | Fan a task across hundreds of subagents with real model routing and cost accounting. |
 | [@juicesharp/rpiv-workflow](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-workflow) | Chain skills into typed multi-stage workflows with audited state. |
 | [@juicesharp/rpiv-todo](https://github.com/juicesharp/rpiv-mono/tree/main/packages/rpiv-todo) | A live todo overlay for the model that survives `/reload` and compaction. |
@@ -186,7 +185,6 @@ alongside this provider — grouped by what they do, with install commands below
 
 | Extension | What it does |
 | --- | --- |
-| [pi-provider-kimi-code](https://github.com/Leechael/pi-provider-kimi-code) | Use Kimi Code models in Pi (the `/login` pattern this extension borrows). |
 | [pi-multi-account](https://github.com/Sarrius/pi-multi-account) | Automatic multi-account failover & rotation across Anthropic, OpenAI, Qwen, Ollama. |
 | [glm-vision](https://www.npmjs.com/package/glm-vision) | Gives non-vision GLM models (z.ai) image understanding via GLM-4.6V. |
 
@@ -229,11 +227,9 @@ already have), then restart Pi:
     "npm:@juicesharp/rpiv-pi",
     "npm:pi-code-planner",
     "npm:@gotgenes/pi-subagents",
-    "npm:@ifi/oh-pi-ant-colony",
     "npm:@quintinshaw/pi-dynamic-workflows",
     "npm:@juicesharp/rpiv-workflow",
     "npm:@juicesharp/rpiv-todo",
-    "npm:pi-provider-kimi-code",
     "npm:pi-multi-account",
     "npm:glm-vision",
     "npm:@juicesharp/rpiv-web-tools",
