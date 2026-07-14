@@ -90,8 +90,9 @@ The per-tool guides note where this matters.
 
 ## Contributing
 
-Using the proxy with a tool that isn't covered here? Add a guide under ``
-and link it from the table above. Keep guides short and copy-paste friendly.
+Using the proxy with a tool that isn't covered here? Add a guide as a new
+top-level folder (like the ones above) and link it from the table. Keep guides
+short and copy-paste friendly.
 
 ## License
 

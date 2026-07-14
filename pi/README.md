@@ -1,6 +1,6 @@
-# Pi extension (uva-hva-ai-coding)
+# Pi extension (uva-hva-agentic-tools)
 
-> Part of [uva-hva-ai-coding](../README.md). This is the Pi guide; for other
+> Part of [uva-hva-agentic-tools](../README.md). This is the Pi guide; for other
 > tools see [Claude Code](../claude-code/README.md),
 > [VS Code](../vscode/README.md), [OpenCode](../opencode/README.md),
 > [Aider](../aider/README.md), [Kilo Code](../kilo-code/README.md),
@@ -32,11 +32,11 @@ Pick one:
   ```jsonc
   {
     "packages": [
-      "/path/to/uva-hva-ai-coding/pi"
+      "/path/to/uva-hva-agentic-tools/pi"
     ]
   }
   ```
-- Try it once: `pi -e /path/to/uva-hva-ai-coding/pi`
+- Try it once: `pi -e /path/to/uva-hva-agentic-tools/pi`
 - Auto-load folder: copy `index.ts` to `~/.pi/agent/extensions/`.
 
 ### 2. Connect with `/login`
