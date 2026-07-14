@@ -4,39 +4,13 @@ A [Pi](https://pi.dev) coding-agent **provider extension** for the University of
 Amsterdam / Amsterdam University of Applied Sciences LiteLLM proxies
 (`https://llmproxy.uva.nl/v1`, `https://llmproxy.hva.nl/v1`).
 
-It does four things:
-
-1. **`/login` connect flow.** Run `/login` (or `/uva-login`), pick a base URL
-   (UvA / HvA / custom), paste your API key, and every model is auto-discovered.
-   The base URL + key are saved so the next launch reconnects automatically.
-
-2. **Fixes "thinking then nothing".** The proxy speaks the OpenAI **Responses
-   API** (`/v1/responses`). When tool definitions are present — i.e. **every
-   agent turn** — it collapses the SSE stream to a single terminal
-   `response.completed` event and emits none of the incremental delta events.
-   Pi's built-in Responses parser only builds the reply from those delta events,
-   so the assistant message comes back **empty, with no error**. This extension
-   reconciles the terminal `response.output[]` so nothing is lost.
-
-3. **Defeats the gateway 504 on long reasoning turns.** Reasoning turns buffer
-   server-side (no interim bytes while the model thinks), so streaming them can
-   trip an nginx 504. Those turns are reissued via `background:true` + polling
-   `GET /responses/{id}`, where every HTTP request is short and the gateway
-   timeout can't fire.
-
-4. **Auto-discovers every model.** It fetches `GET /v1/models` and registers all
-   chat/response models (filtering out embeddings, whisper, image, etc.).
-   Models that only speak `/v1/chat/completions` (open-weight gpt-oss / Mistral /
-   Qwen) are routed to Pi's built-in chat handler; OpenAI GPT + Claude use the
-   Responses fix.
-
-## Why the built-in provider isn't enough
-
-If you configure UvA as a normal `openai-responses` provider in `models.json`,
-reasoning models require `reasoning.effort`, which the proxy only accepts on
-`/v1/responses` (not `/v1/chat/completions`). Once you switch to the Responses
-API, the streaming-with-tools bug above makes every turn return nothing. This
-extension is the fix.
+Get every UvA/HvA model working in Pi in under a minute — no editing Pi's config
+files. Load the extension, run `/login`, pick your proxy, paste your API key, and
+it auto-discovers all available models so you can select one straight from
+`/models`. Your base URL and key are saved, so the next launch just reconnects.
+Reasoning models come pre-tuned (thinking on, `sol` at high, the rest at medium),
+and tool-heavy agent turns that would otherwise silently come back empty on this
+proxy just work. That's the whole setup — everything below is optional detail.
 
 ## Install
 
@@ -116,6 +90,25 @@ the table doesn't know — or you disagree with a value — point
 
 Each key is a model id; each value may set any of `reasoning`, `input`,
 `contextWindow`, `maxTokens`, `name`, `cost`, `thinkingLevelMap`.
+
+## What it fixes
+
+The proxy speaks the OpenAI **Responses API** (`/v1/responses`), and reasoning
+models require `reasoning.effort` — which the proxy only accepts there, not on
+`/v1/chat/completions`. But on the Responses API this proxy has two rough edges:
+
+- **Empty tool turns.** When tool definitions are present (i.e. every agent
+  turn) it collapses the SSE stream to a single terminal `response.completed`
+  event and drops the incremental deltas, so Pi's built-in parser builds an
+  **empty** reply with no error. This extension reconciles the terminal
+  `response.output[]` so nothing is lost.
+- **Gateway 504 on long reasoning.** Reasoning turns buffer server-side with no
+  interim bytes, so streaming them can trip an nginx 504. Those turns are
+  reissued via `background:true` + polling, where each request is short and the
+  timeout can't fire.
+
+A plain `openai-responses` provider in `models.json` hits both. This extension
+is the fix — and adds `/login`, model auto-discovery, and the thinking defaults.
 
 ## How it works
 
