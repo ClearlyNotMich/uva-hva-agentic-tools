@@ -29,18 +29,9 @@ You need Pi installed and a UvA/HvA proxy API key.
 
 Pick one:
 
-- From npm (easiest): run
+- From npm : run
   ```bash
   pi install npm:pi-uva-hva
-  ```
-  or add `"npm:pi-uva-hva"` to the `packages` array in `~/.pi/agent/settings.json`
-  (Pi installs it on the next launch, no clone needed):
-  ```jsonc
-  {
-    "packages": [
-      "npm:pi-uva-hva"
-    ]
-  }
   ```
 - From a local clone: clone the repo and point at the `pi/` folder instead:
   ```jsonc
@@ -50,8 +41,6 @@ Pick one:
     ]
   }
   ```
-- Try it once: `pi -e /path/to/uva-hva-agentic-tools/pi`
-- Auto-load folder: copy `index.ts` to `~/.pi/agent/extensions/`.
 
 ### 2. Connect with `/login`
 
