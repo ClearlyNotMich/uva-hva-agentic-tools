@@ -180,14 +180,26 @@ alongside this provider, grouped by what they do, with install commands below.
 
 ### Context, memory & compaction
 
-| Extension | What it does |
-| --- | --- |
-| [pi-lean-ctx](https://leanctx.com) | Routes `bash`/`read`/`grep`/`find`/`ls` through lean-ctx for big token savings, plus an embedded MCP bridge. |
-| [context-mode](https://github.com/mksglu/context-mode) | Offloads large tool/command output into a sandbox so it never floods your context window. |
-| [@hypabolic/pi-hypa](https://github.com/Hypabolic/Hypa/tree/main/packages/pi-hypa) | Rewrites shell commands through Hypa, a local context runtime, to compress noisy tool output before it reaches the context window. |
-| [pi-smart-compact](https://github.com/alpertarhan/pi-smart-compact) | Verification-oriented smart compaction: deterministic extraction, synthesis, and metrics. |
-| [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) | Optimizes RTK command rewriting and tool-output compaction. |
-| [gentle-engram](https://github.com/Gentleman-Programming/engram) | Persistent memory shared across sessions, compactions, and MCP agents. |
+These three cover the three layers with one tool each, so nothing overlaps:
+
+| Extension | Layer | What it does |
+| --- | --- | --- |
+| [context-mode](https://github.com/mksglu/context-mode) | Tool output | Offloads large tool/command output into a sandbox and a searchable store so it never floods your context window. |
+| [pi-smart-compact](https://github.com/alpertarhan/pi-smart-compact) | History | Verification-oriented conversation compaction: deterministic extract, then synthesize, then verify what survived. |
+| [gentle-engram](https://github.com/Gentleman-Programming/engram) | Memory | Persistent memory shared across sessions, compactions, and MCP agents. |
+
+Pick only one tool-output interceptor. `context-mode`,
+[`pi-lean-ctx`](https://leanctx.com),
+[`@hypabolic/pi-hypa`](https://github.com/Hypabolic/Hypa/tree/main/packages/pi-hypa),
+and [`pi-rtk-optimizer`](https://github.com/MasuRii/pi-rtk-optimizer) all sit in
+front of the same shell/tool output, so running several stacks them (double
+compression, competing hooks). `pi-lean-ctx` also installs a shell allowlist that
+can silently block commands like `node`. This setup uses `context-mode`; if you
+prefer one of the others, use it instead of `context-mode`, not alongside it.
+
+Same rule for history compaction: run one owner (`pi-smart-compact` here). It
+hooks Pi's compaction path, so do not pair it with another auto-compaction
+extension.
 
 ### Planning, workflows & subagents
 
@@ -239,9 +251,7 @@ already have), then restart Pi:
 ```jsonc
 {
   "packages": [
-    "npm:pi-lean-ctx",
     "npm:context-mode",
-    "npm:@hypabolic/pi-hypa",
     "npm:pi-smart-compact",
     "npm:gentle-engram",
     "npm:@juicesharp/rpiv-pi",
@@ -262,7 +272,6 @@ already have), then restart Pi:
     "npm:@juicesharp/rpiv-args",
     "npm:@juicesharp/rpiv-i18n",
     "npm:pi-simplify",
-    "npm:pi-rtk-optimizer",
     "npm:opencode-ponytail"
   ]
 }
@@ -273,7 +282,7 @@ Each entry is just `"npm:<name>"`, e.g.:
 
 ```jsonc
 "packages": [
-  "npm:pi-lean-ctx"
+  "npm:context-mode"
 ]
 ```
 
@@ -289,7 +298,9 @@ single install:
   auto-wires the Pi hooks and heals the native binding, so no manual setup is
   needed. Just verify afterward with `/context-mode:ctx-doctor` (or
   `npx context-mode doctor`). If an install ever complains about
-  `better-sqlite3`, upgrading Node to 22.5+ is the fix.
+  `better-sqlite3`, upgrading Node to 22.5+ is the fix. Known quirk: if you also
+  have a `~/.claude` folder, context-mode may store its knowledge base there
+  instead of under `~/.pi`; harmless, but that is where to look for it.
 
 - `gentle-engram` needs the Engram backend. The npm package is only the Pi
   bridge: persistence is handled by a separate `engram` binary that it launches
@@ -300,18 +311,9 @@ single install:
   `packages`: `npm:gentle-engram`, not a second pinned copy like
   `npm:gentle-engram@0.1.8`.
 
-- `pi-lean-ctx` installs a shell allowlist. It routes `bash`/`read`/`grep`/
-  `find`/`ls` through lean-ctx (big token savings) and runs an embedded MCP
-  bridge by default. It vendors its own binary (no separate install), but its
-  security allowlist can block some shell commands (e.g. `node -e`, certain glob
-  or command-substitution patterns). If a command is blocked, allow it with
-  `lean-ctx allow <cmd>`, edit `~/.config/lean-ctx/config.toml`, or set
-  `LEAN_CTX_ALLOWLIST_WARN_ONLY=1` to downgrade blocks to warnings.
-
-> Some of these overlap in purpose (multiple planners/workflow engines, several
-> compaction strategies, and both `context-mode` and `pi-lean-ctx` wrap tool
-> output). Start with the context/memory group, then add planning and tools as
-> you need them rather than enabling all of them at once.
+> Some of these overlap in purpose (multiple planners and workflow engines).
+> Start with the context/memory group, then add planning and tools as you need
+> them rather than enabling all of them at once.
 
 ## License
 
