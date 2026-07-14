@@ -128,18 +128,18 @@ const DENY = /embedding|whisper|audio|tts|speech|dall|(^|[-_])image|document-ai|
 const FALLBACK_MODEL_IDS = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5", "gpt-5.1", "gpt-5", "gpt-4.1", "gpt-4o"];
 
 // ---------------------------------------------------------------------------
-// Capability table (LiteLLM /v1/models returns only ids, no metadata).
+// FALLBACK capability table.
 //
-// Values are researched per model family (context window / max output tokens /
-// whether it is a reasoning model / whether it accepts image input). Sources:
-// OpenAI & Anthropic API docs, OpenRouter, artificialanalysis.ai (2026).
+// The primary source of truth is the proxy's own /model_group/info (real
+// context window, max output, reasoning/vision support, cost, backend). This
+// table only fills fields the proxy leaves blank — common for brand-new
+// deployments whose metadata isn't populated yet (e.g. gpt-5.6-* report empty
+// token limits) — and is the whole story only if /model_group/info is
+// unavailable and discovery falls back to /v1/models (ids only).
 //
-// `reasoning` is deliberately enabled ONLY for the OpenAI reasoning families
-// (gpt-5*, o-series, gpt-oss) because `reasoning.effort` is native to the
-// OpenAI Responses API. Anthropic / Qwen / Mistral still work perfectly as
-// non-thinking chat models through the proxy; enabling effort on them is not
-// reliably translated and can error. Override per-id if your proxy differs
-// (see UVA_MODEL_OVERRIDES_FILE below).
+// Values are researched per model family. Any positive signal (metadata OR this
+// table) enables reasoning/vision, so a new model is never worse off than its
+// name family. Override per-id via UVA_MODEL_OVERRIDES_FILE.
 //
 // First matching entry wins; order matters (specific → general).
 // ---------------------------------------------------------------------------
@@ -188,14 +188,30 @@ const REASONING_THINKING_MAP = {
   max: null,
 } as const;
 
-// Which models actually support the OpenAI Responses API on this proxy. The
-// rest (gpt-oss, Mistral, Qwen, ... — open-weight vLLM deployments) 404 on
-// /v1/responses and must use /v1/chat/completions instead. OpenAI GPT-4/5,
-// the o-series, Claude (Anthropic), and Azure model-router speak Responses.
-const RESPONSES_CAPABLE = /^(gpt-4|gpt-5|o[134]([-_]|$)|claude|model-router)/i;
+// Endpoint routing. Some models speak the OpenAI Responses API (/v1/responses);
+// open-weight vLLM deployments only speak /v1/chat/completions and 404 on
+// /responses. We derive this from the proxy's own /model_group/info metadata
+// (backend `providers`), fall back to a name regex when metadata is absent, and
+// SELF-HEAL at runtime: a Responses turn that 404s is retried on
+// chat-completions and the id is remembered for the rest of the session.
+const RESPONSES_CAPABLE = /^(gpt-4|gpt-5|o[0-9]|claude|model-router|grok|gemini)/i;
+const RESPONSES_PROVIDERS = /azure|bedrock|vertex|anthropic|openai_responses/i;
 
-function apiForModel(id: string): string {
-  return RESPONSES_CAPABLE.test(id) ? CUSTOM_API : "openai-completions";
+// id -> route, seeded at registration from metadata / name.
+const modelRoutes = new Map<string, "responses" | "chat">();
+// Runtime self-heal overrides (win over modelRoutes, survive re-registration).
+const routeOverrides = new Map<string, "responses" | "chat">();
+
+function routeForModel(id: string, providers?: string[]): "responses" | "chat" {
+  if (routeOverrides.has(id)) return routeOverrides.get(id)!;
+  if (providers && providers.length) {
+    return providers.some((p) => RESPONSES_PROVIDERS.test(p)) ? "responses" : "chat";
+  }
+  return RESPONSES_CAPABLE.test(id) ? "responses" : "chat";
+}
+
+function currentRoute(id: string): "responses" | "chat" {
+  return routeOverrides.get(id) ?? modelRoutes.get(id) ?? (RESPONSES_CAPABLE.test(id) ? "responses" : "chat");
 }
 
 function resolveCaps(id: string): Caps {
@@ -206,24 +222,35 @@ function resolveCaps(id: string): Caps {
   return { ctx: reasoning ? 400_000 : 128_000, out: reasoning ? 128_000 : 16_384, reasoning, vision };
 }
 
-function buildModelDef(id: string, overrides: Record<string, any>) {
+// Every model is registered under CUSTOM_API so our streamSimple always runs and
+// decides the endpoint per turn (with self-heal). Capabilities are taken from
+// the proxy metadata when present, falling back to the researched CAPS table for
+// fields the proxy leaves blank (common for brand-new deployments).
+function buildModelDef(info: ModelInfo, overrides: Record<string, any>) {
+  const id = info.id;
   const caps = resolveCaps(id);
   const ov = overrides[id] || {};
-  const api = ov.api || apiForModel(id);
-  const isResponses = api === CUSTOM_API;
-  // Reasoning (reasoning.effort) is only wired up on the Responses fix path.
-  // Chat-completions models are registered as plain chat for reliability.
-  const reasoning = ov.reasoning ?? (isResponses ? caps.reasoning : false);
-  const vision = ov.vision ?? caps.vision;
+  const route = routeForModel(id, info.providers);
+  modelRoutes.set(id, route);
+  const isResponses = route === "responses";
+  // Reasoning only on the Responses route (chat-completions rejects
+  // reasoning_effort with tools). Any positive signal enables it; incomplete
+  // metadata (all-false on new models) is corrected by the CAPS fallback.
+  const reasoning = ov.reasoning ?? (isResponses && ((info.reasoning ?? false) || caps.reasoning));
+  const vision = ov.vision ?? ((info.vision ?? false) || caps.vision);
+  const ctx = ov.contextWindow ?? (info.ctx && info.ctx > 0 ? info.ctx : caps.ctx);
+  const out = ov.maxTokens ?? (info.out && info.out > 0 ? info.out : caps.out);
+  const hasCost = !!info.cost && (info.cost.input > 0 || info.cost.output > 0);
+  const cost = ov.cost ?? (hasCost ? info.cost : { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 });
   return {
     id,
     name: ov.name || `${id} (UvA)`,
-    api,
+    api: CUSTOM_API,
     reasoning,
     input: (ov.input as string[]) || (vision ? ["text", "image"] : ["text"]),
-    cost: ov.cost || { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: ov.contextWindow ?? caps.ctx,
-    maxTokens: ov.maxTokens ?? caps.out,
+    cost,
+    contextWindow: ctx,
+    maxTokens: out,
     ...(reasoning ? { thinkingLevelMap: ov.thinkingLevelMap || REASONING_THINKING_MAP } : {}),
   };
 }
@@ -243,7 +270,67 @@ function loadOverrides(): Record<string, any> {
   }
 }
 
-async function discoverModelIds(apiKey: string | undefined, baseUrl: string): Promise<string[]> {
+type ModelInfo = {
+  id: string;
+  ctx?: number;
+  out?: number;
+  reasoning?: boolean;
+  vision?: boolean;
+  cost?: { input: number; output: number; cacheRead: number; cacheWrite: number };
+  providers?: string[];
+  mode?: string;
+};
+
+// Non-chat model modes to skip (LiteLLM `mode` from /model_group/info).
+const EXCLUDED_MODES = new Set([
+  "embedding",
+  "ocr",
+  "image_generation",
+  "moderation",
+  "rerank",
+  "audio",
+  "transcription",
+  "image",
+]);
+
+// Rich per-model metadata from LiteLLM's /model_group/info: real context window,
+// max output, reasoning/vision support, backend providers, and cost. This is the
+// source of truth that lets the extension adapt when the model line-up changes.
+async function fetchModelInfos(apiKey: string | undefined, baseUrl: string): Promise<ModelInfo[]> {
+  const root = baseUrl.replace(/\/+$/, "").replace(/\/v1$/, "");
+  const res = await fetch(`${root}/model_group/info`, {
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
+  });
+  if (!res.ok) throw new Error(`GET ${root}/model_group/info -> HTTP ${res.status}`);
+  const data: any = await res.json();
+  const rows = Array.isArray(data?.data) ? data.data : [];
+  const perM = (v: any) => (typeof v === "number" && v > 0 ? v * 1_000_000 : 0);
+  const infos: ModelInfo[] = [];
+  for (const m of rows) {
+    const id = m?.model_group;
+    if (typeof id !== "string" || !id) continue;
+    const params: string[] = Array.isArray(m.supported_openai_params) ? m.supported_openai_params : [];
+    infos.push({
+      id,
+      mode: typeof m.mode === "string" ? m.mode : "",
+      providers: Array.isArray(m.providers) ? m.providers : [],
+      ctx: typeof m.max_input_tokens === "number" ? m.max_input_tokens : 0,
+      out: typeof m.max_output_tokens === "number" ? m.max_output_tokens : 0,
+      reasoning: !!m.supports_reasoning || params.includes("reasoning_effort"),
+      vision: !!m.supports_vision,
+      cost: {
+        input: perM(m.input_cost_per_token),
+        output: perM(m.output_cost_per_token),
+        cacheRead: perM(m.cache_read_input_token_cost),
+        cacheWrite: perM(m.cache_creation_input_token_cost),
+      },
+    });
+  }
+  return infos;
+}
+
+// Fallback discovery: /v1/models returns ids only (no capabilities).
+async function fetchModelIds(apiKey: string | undefined, baseUrl: string): Promise<string[]> {
   const root = baseUrl.replace(/\/+$/, "");
   const res = await fetch(`${root}/models`, {
     headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : {},
@@ -255,6 +342,21 @@ async function discoverModelIds(apiKey: string | undefined, baseUrl: string): Pr
     .filter((id: any): id is string => typeof id === "string" && id.length > 0);
   if (ids.length === 0) throw new Error("no models returned by /v1/models");
   return ids;
+}
+
+// Layered discovery: rich metadata first, ids-only fallback. Throws only if
+// BOTH fail, so /login can detect a bad key/URL.
+async function discoverModels(apiKey: string | undefined, baseUrl: string): Promise<ModelInfo[]> {
+  try {
+    const infos = await fetchModelInfos(apiKey, baseUrl);
+    if (infos.length) return infos;
+  } catch (err) {
+    console.error(
+      `[openai-responses-uva] /model_group/info unavailable (${err instanceof Error ? err.message : String(err)}); falling back to /v1/models.`,
+    );
+  }
+  const ids = await fetchModelIds(apiKey, baseUrl);
+  return ids.map((id) => ({ id }));
 }
 
 // ---------------------------------------------------------------------------
@@ -731,8 +833,43 @@ async function runBackgroundPoll(
   output.stopReason = mapStopReason(terminal.status);
 }
 
+/** Delegate a turn to Pi's built-in chat-completions handler (open-weight models). */
+function chatDelegate(model: any, context: any, options: any): any {
+  const builtin = getApiProvider("openai-completions");
+  if (!builtin) {
+    const out = createAssistantMessageEventStream();
+    out.push({
+      type: "error",
+      reason: "error",
+      error: {
+        role: "assistant",
+        content: [],
+        stopReason: "error",
+        errorMessage: "openai-responses-uva: openai-completions handler unavailable",
+      },
+    });
+    out.end();
+    return out;
+  }
+  // Strip reasoning: chat-completions rejects reasoning_effort with tools.
+  return builtin.streamSimple(
+    { ...model, api: "openai-completions", reasoning: false, thinkingLevelMap: undefined },
+    context,
+    options,
+  );
+}
+
+async function pipeInto(out: any, src: any): Promise<void> {
+  for await (const ev of src) out.push(ev);
+}
+
 /** The replacement streamSimple for UvA models. */
 function uvaStreamSimple(model: any, context: any, options: any): any {
+  // Open-weight models only speak chat-completions — delegate straight to the
+  // built-in handler (standard streaming, no Responses bug to work around).
+  if (currentRoute(model.id) === "chat") {
+    return chatDelegate(model, context, options);
+  }
   const out = createAssistantMessageEventStream();
   (async () => {
     const output: any = {
@@ -804,12 +941,27 @@ function uvaStreamSimple(model: any, context: any, options: any): any {
       out.push({ type: "done", reason: output.stopReason, message: output });
       out.end();
     } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      // Self-heal: this model isn't on /responses (proxy 404 / "not found").
+      // Remember it as chat-only and reissue this turn on chat-completions.
+      const notOnResponses =
+        (error as any)?.status === 404 || /HTTP 404|not found|does not exist|no model group|NotFound/i.test(msg);
+      if (notOnResponses && output.content.length === 0 && !options?.signal?.aborted) {
+        routeOverrides.set(model.id, "chat");
+        try {
+          await pipeInto(out, chatDelegate(model, context, options));
+          out.end();
+          return;
+        } catch {
+          /* fall through to error reporting */
+        }
+      }
       for (const block of output.content) {
         delete block.partialJson;
         delete block.index;
       }
       output.stopReason = options?.signal?.aborted ? "aborted" : "error";
-      output.errorMessage = error instanceof Error ? error.message : String(error);
+      output.errorMessage = msg;
       out.push({ type: "error", reason: output.stopReason, error: output });
       out.end();
     }
@@ -823,16 +975,19 @@ function uvaStreamSimple(model: any, context: any, options: any): any {
 
 /** Discover + build the model list for a given key/base URL (falls back on error). */
 async function buildModels(apiKey: string | undefined, baseUrl: string): Promise<any[]> {
-  let ids: string[];
+  let infos: ModelInfo[];
   try {
-    ids = await discoverModelIds(apiKey, baseUrl);
+    infos = await discoverModels(apiKey, baseUrl);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[openai-responses-uva] model discovery failed (${msg}); using fallback list.`);
-    ids = FALLBACK_MODEL_IDS;
+    infos = FALLBACK_MODEL_IDS.map((id) => ({ id }));
   }
   const overrides = loadOverrides();
-  return ids.filter((id) => !DENY.test(id)).map((id) => buildModelDef(id, overrides));
+  modelRoutes.clear();
+  return infos
+    .filter((info) => !DENY.test(info.id) && !(info.mode && EXCLUDED_MODES.has(info.mode)))
+    .map((info) => buildModelDef(info, overrides));
 }
 
 function registerProviderNow(pi: ExtensionAPI, models: any[], baseUrl: string): void {
@@ -881,8 +1036,8 @@ function makeOAuth(pi: ExtensionAPI) {
       const apiKey = key.trim();
 
       callbacks.onProgress?.("Discovering models…");
-      const ids = await discoverModelIds(apiKey, baseUrl); // throws on a bad key/url -> login fails
-      callbacks.onProgress?.(`Connected — ${ids.length} models available.`);
+      const infos = await discoverModels(apiKey, baseUrl); // throws on a bad key/url -> login fails
+      callbacks.onProgress?.(`Connected — ${infos.length} models available.`);
 
       saveCreds({ baseUrl, apiKey });
       activeApiKey = apiKey;

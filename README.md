@@ -136,6 +136,20 @@ Two dispatch paths keep it reliable:
 Params incompatible with non-OpenAI backends (`prompt_cache_key` on
 Bedrock/Vertex) are stripped per-model.
 
+### Robust to model changes
+
+The UvA/HvA line-up changes often, so nothing about specific models is
+hard-coded. On connect the extension reads the proxy's own
+`/model_group/info` and derives each model's context window, max output,
+reasoning/vision support, cost, and backend directly from it, then decides the
+endpoint from the backend (`azure`/`bedrock` speak the Responses API;
+open-weight `openai`/vLLM models use chat-completions). If that metadata
+endpoint is ever unavailable it falls back to `/v1/models` plus a researched
+name table, and if a model is still mis-routed, a Responses turn that 404s is
+**self-healed** at runtime (retried on chat-completions and remembered). So even
+if every current model is replaced with new ones, discovery, capabilities, and
+routing keep working with no code change.
+
 ### Trade-off
 
 Reasoning replies are **not** token-by-token; they appear at once on completion
@@ -144,11 +158,12 @@ Non-reasoning turns stream normally.
 
 ## Reasoning models
 
-`reasoning.effort` is enabled only for the OpenAI reasoning families
-(`gpt-5*`, `o*`, `gpt-oss`), where it is native to the Responses API. Anthropic /
-Qwen / Mistral are registered as non-thinking chat models for reliability; flip
-them on per-id via `UVA_MODEL_OVERRIDES_FILE` if your proxy translates effort for
-them.
+Reasoning is enabled per model from the proxy metadata (`supports_reasoning` or a
+`reasoning_effort` parameter), with the name table as a fallback, but only on the
+Responses route (chat-completions rejects `reasoning_effort` alongside tools).
+Reasoning models default to thinking ON: any `-sol` model at **high**, the rest
+at **medium** (disable with `UVA_NO_AUTO_THINKING=1`). Override any model's
+capabilities per-id via `UVA_MODEL_OVERRIDES_FILE`.
 
 ## Compatibility
 
