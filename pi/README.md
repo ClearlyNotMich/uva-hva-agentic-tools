@@ -186,6 +186,7 @@ alongside this provider, grouped by what they do, with install commands below.
 | [context-mode](https://github.com/mksglu/context-mode) | Offloads large tool/command output into a sandbox so it never floods your context window. |
 | [@hypabolic/pi-hypa](https://github.com/Hypabolic/Hypa/tree/main/packages/pi-hypa) | Rewrites shell commands through Hypa, a local context runtime, to compress noisy tool output before it reaches the context window. |
 | [pi-smart-compact](https://github.com/alpertarhan/pi-smart-compact) | Verification-oriented smart compaction: deterministic extraction, synthesis, and metrics. |
+| [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) | Optimizes RTK command rewriting and tool-output compaction. |
 | [gentle-engram](https://github.com/Gentleman-Programming/engram) | Persistent memory shared across sessions, compactions, and MCP agents. |
 
 ### Planning, workflows & subagents
@@ -225,7 +226,6 @@ alongside this provider, grouped by what they do, with install commands below.
 | Extension | What it does |
 | --- | --- |
 | [pi-simplify](https://github.com/MattDevy/pi-extensions/tree/main/packages/pi-simplify) | Reviews recently changed code for clarity, consistency, and maintainability. |
-| [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) | Optimizes RTK command rewriting and tool-output compaction. |
 | [ponytail](https://github.com/DietrichGebert/ponytail) | Lazy senior dev mode: stops the agent over-engineering and writes the minimum code that works, with `/ponytail` review/audit/debt commands. |
 
 ### Install them
