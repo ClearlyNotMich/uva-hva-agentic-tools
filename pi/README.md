@@ -7,6 +7,8 @@
 > [Factory Droid](../factory-droid/README.md), or
 > [Odysseus](../odysseus/README.md).
 
+[![npm version](https://img.shields.io/npm/v/pi-uva-hva)](https://www.npmjs.com/package/pi-uva-hva)
+
 A [Pi](https://pi.dev) coding-agent provider extension for the University of
 Amsterdam / Amsterdam University of Applied Sciences LiteLLM proxies
 (`https://llmproxy.uva.nl/v1`, `https://llmproxy.hva.nl/v1`).
@@ -27,9 +29,12 @@ You need Pi installed and a UvA/HvA proxy API key.
 
 Pick one:
 
-- From npm (easiest): add `"npm:pi-uva-hva"` to the `packages` array in
-  `~/.pi/agent/settings.json` (or run `pi install npm:pi-uva-hva`). Pi installs
-  it on the next launch, no clone needed:
+- From npm (easiest): run
+  ```bash
+  pi install npm:pi-uva-hva
+  ```
+  or add `"npm:pi-uva-hva"` to the `packages` array in `~/.pi/agent/settings.json`
+  (Pi installs it on the next launch, no clone needed):
   ```jsonc
   {
     "packages": [

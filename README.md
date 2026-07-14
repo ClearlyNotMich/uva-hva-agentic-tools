@@ -30,6 +30,9 @@ beyond the tool's own secret storage or an environment variable you control.
 | **Factory Droid** | BYOK custom models | Terminal agent, per-model endpoint control | [factory-droid/](factory-droid/README.md) |
 | **Odysseus** | Self-hosted, OpenAI-compatible provider | A full self-hosted AI workspace | [odysseus/](odysseus/README.md) |
 
+The Pi extension is published on npm, install it with `pi install npm:pi-uva-hva`
+(full docs in [pi/](pi/README.md)).
+
 Any other tool that speaks the OpenAI or Anthropic API can point at the proxy
 too; see [opencode/](opencode/README.md) for the generic pattern.
 
