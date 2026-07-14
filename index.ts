@@ -197,6 +197,10 @@ const REASONING_THINKING_MAP = {
 const RESPONSES_CAPABLE = /^(gpt-4|gpt-5|o[0-9]|claude|model-router|grok|gemini)/i;
 const RESPONSES_PROVIDERS = /azure|bedrock|vertex|anthropic|openai_responses/i;
 
+// The model defs from the most recent registration (for the /configure-models
+// menu to show current effective values).
+let currentModels: any[] = [];
+
 // id -> route, seeded at registration from metadata / name.
 const modelRoutes = new Map<string, "responses" | "chat">();
 // Runtime self-heal overrides (win over modelRoutes, survive re-registration).
@@ -255,19 +259,32 @@ function buildModelDef(info: ModelInfo, overrides: Record<string, any>) {
   };
 }
 
-/** Optional per-id capability overrides from a JSON file (UVA_MODEL_OVERRIDES_FILE). */
+// Per-id capability overrides (context window, reasoning, default thinking
+// level, ...) written by the /configure-models menu. Path is
+// UVA_MODEL_OVERRIDES_FILE or ~/.pi/agent/openai-responses-uva.models.json.
+function overridesFile(): string {
+  if (process.env.UVA_MODEL_OVERRIDES_FILE) return process.env.UVA_MODEL_OVERRIDES_FILE;
+  const os = require("node:os");
+  const { join } = require("node:path");
+  return join(os.homedir(), ".pi", "agent", "openai-responses-uva.models.json");
+}
+
 function loadOverrides(): Record<string, any> {
-  const file = process.env.UVA_MODEL_OVERRIDES_FILE;
-  if (!file) return {};
   try {
-    // Lazy require so the module has no hard fs dependency when unused.
     const { readFileSync } = require("node:fs");
-    const parsed = JSON.parse(readFileSync(file, "utf8"));
+    const parsed = JSON.parse(readFileSync(overridesFile(), "utf8"));
     return parsed && typeof parsed === "object" ? parsed : {};
-  } catch (err) {
-    console.error(`[openai-responses-uva] failed to read UVA_MODEL_OVERRIDES_FILE (${String(err)})`);
+  } catch {
     return {};
   }
+}
+
+function saveOverrides(obj: Record<string, any>): void {
+  const { writeFileSync, mkdirSync } = require("node:fs");
+  const { dirname } = require("node:path");
+  const file = overridesFile();
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(obj, null, 2));
 }
 
 type ModelInfo = {
@@ -991,6 +1008,7 @@ async function buildModels(apiKey: string | undefined, baseUrl: string): Promise
 }
 
 function registerProviderNow(pi: ExtensionAPI, models: any[], baseUrl: string): void {
+  currentModels = models;
   pi.registerProvider(PROVIDER_ID, {
     name: "UvA / HvA (Responses fix)",
     baseUrl: baseUrl.replace(/\/+$/, ""),
@@ -1073,10 +1091,63 @@ function makeOAuth(pi: ExtensionAPI) {
 function applyThinkingDefault(pi: ExtensionAPI, model: any): void {
   if (process.env.UVA_NO_AUTO_THINKING) return;
   if (!model || model.provider !== PROVIDER_ID || !model.reasoning) return;
+  const ov = loadOverrides()[model.id] || {};
+  const level = ov.defaultThinkingLevel || (isSolModel(model.id) ? "high" : "medium");
   try {
-    pi.setThinkingLevel(isSolModel(model.id) ? "high" : "medium");
+    pi.setThinkingLevel(level);
   } catch {
     /* ignore */
+  }
+}
+
+/** Interactive per-model settings loop for /configure-models (mutates `draft`). */
+async function configureOneModel(ctx: any, id: string, draft: Record<string, any>): Promise<void> {
+  const def = currentModels.find((m) => m.id === id);
+  const ov = draft[id] || (draft[id] = {});
+  const eff = (k: string, fallback: any) => (ov[k] !== undefined ? ov[k] : fallback);
+  const num = (v: any) => parseInt(String(v ?? "").replace(/[_,\s]/g, ""), 10);
+  const RESET = "\u27f2 Reset this model to auto (remove override)";
+  const BACK = "\u2190 Back to model list";
+  while (true) {
+    const reasoning = eff("reasoning", def?.reasoning ?? false);
+    const visionOn = eff("vision", (def?.input || []).includes("image"));
+    const defLevel = eff("defaultThinkingLevel", isSolModel(id) ? "high" : reasoning ? "medium" : "n/a");
+    const items = [
+      `Context window: ${eff("contextWindow", def?.contextWindow ?? "?")}`,
+      `Max output tokens: ${eff("maxTokens", def?.maxTokens ?? "?")}`,
+      `Reasoning: ${reasoning ? "on" : "off"}`,
+      `Default thinking level: ${defLevel}`,
+      `Vision (image input): ${visionOn ? "on" : "off"}`,
+      RESET,
+      BACK,
+    ];
+    const pick = await ctx.ui.select(`${id} \u2014 pick a setting to change`, items);
+    if (pick === undefined || pick === BACK) return;
+    if (pick === RESET) {
+      delete draft[id];
+      ctx.ui.notify(`${id}: override cleared.`, "info");
+      return;
+    }
+    if (pick.startsWith("Context window")) {
+      const v = await ctx.ui.input(`${id} \u2014 context window (tokens)`, String(eff("contextWindow", def?.contextWindow ?? "")));
+      const n = num(v);
+      if (Number.isFinite(n) && n > 0) ov.contextWindow = n;
+      else if (v !== undefined) ctx.ui.notify("Enter a positive integer.", "warning");
+    } else if (pick.startsWith("Max output")) {
+      const v = await ctx.ui.input(`${id} \u2014 max output tokens`, String(eff("maxTokens", def?.maxTokens ?? "")));
+      const n = num(v);
+      if (Number.isFinite(n) && n > 0) ov.maxTokens = n;
+      else if (v !== undefined) ctx.ui.notify("Enter a positive integer.", "warning");
+    } else if (pick.startsWith("Reasoning:")) {
+      const v = await ctx.ui.select(`${id} \u2014 reasoning (thinking) support`, ["on", "off"]);
+      if (v) ov.reasoning = v === "on";
+    } else if (pick.startsWith("Default thinking")) {
+      const v = await ctx.ui.select(`${id} \u2014 default thinking level when selected`, ["off", "low", "medium", "high"]);
+      if (v) ov.defaultThinkingLevel = v;
+    } else if (pick.startsWith("Vision")) {
+      const v = await ctx.ui.select(`${id} \u2014 vision (image input)`, ["on", "off"]);
+      if (v) ov.vision = v === "on";
+    }
   }
 }
 
@@ -1119,6 +1190,48 @@ export default async function (pi: ExtensionAPI): Promise<void> {
         ctx.ui.notify(`Connected to ${cred.baseUrl}. Open /models to pick one.`, "info");
       } catch (err) {
         ctx.ui.notify(`Login failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+      }
+    },
+  });
+
+  pi.registerCommand("configure-models", {
+    description: "Override a model's context window, max output, reasoning, and default thinking level",
+    handler: async (_args: string, ctx: any) => {
+      if (!ctx.hasUI) {
+        ctx.ui.notify("/configure-models needs interactive UI.", "error");
+        return;
+      }
+      if (!currentModels.length) {
+        ctx.ui.notify("No models loaded yet \u2014 run /login (or set UVA_API_KEY) first.", "error");
+        return;
+      }
+      const draft: Record<string, any> = JSON.parse(JSON.stringify(loadOverrides()));
+      const SAVE = "\u2714 Save & apply changes";
+      const DISCARD = "\u2718 Discard & exit";
+      while (true) {
+        const ids = currentModels.map((m) => m.id);
+        const marked = ids.map((id) => (draft[id] && Object.keys(draft[id]).length ? `${id}  (edited)` : id));
+        const pick = await ctx.ui.select("Configure model overrides", [...marked, SAVE, DISCARD]);
+        if (pick === undefined || pick === DISCARD) {
+          ctx.ui.notify("No changes applied.", "info");
+          return;
+        }
+        if (pick === SAVE) {
+          for (const k of Object.keys(draft)) {
+            if (!draft[k] || Object.keys(draft[k]).length === 0) delete draft[k];
+          }
+          try {
+            saveOverrides(draft);
+            registerProviderNow(pi, await buildModels(activeApiKey, activeBaseUrl), activeBaseUrl);
+            if (ctx.model) applyThinkingDefault(pi, ctx.model);
+            ctx.ui.notify(`Saved & applied overrides for ${Object.keys(draft).length} model(s).`, "info");
+          } catch (err) {
+            ctx.ui.notify(`Save failed: ${err instanceof Error ? err.message : String(err)}`, "error");
+          }
+          return;
+        }
+        const id = pick.replace(/  \(edited\)$/, "");
+        await configureOneModel(ctx, id, draft);
       }
     },
   });

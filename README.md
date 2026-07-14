@@ -76,20 +76,29 @@ variables (all optional):
 
 ### Per-model overrides
 
-Model capabilities (context window, max output, reasoning, vision) are inferred
-from the model id using a researched family table. If the proxy exposes a model
-the table doesn't know, or you disagree with a value, point
-`UVA_MODEL_OVERRIDES_FILE` at a JSON file:
+Capabilities come from the proxy metadata (with a name-table fallback). To pin a
+value yourself there are two ways.
+
+**Interactive menu (easiest):** run `/configure-models`. Pick a model, then set
+its context window and max output (type the number), toggle reasoning on/off,
+and choose the default thinking level applied when that model is selected. Two
+options at the end, **Save & apply changes** and **Discard & exit**. Saved
+overrides are written to `~/.pi/agent/openai-responses-uva.models.json` and
+applied live (and on every future launch).
+
+**By hand:** point `UVA_MODEL_OVERRIDES_FILE` at a JSON file (this overrides the
+default path above):
 
 ```json
 {
-  "claude-opus-4.8": { "reasoning": true, "contextWindow": 1000000, "maxTokens": 64000 },
-  "some-new-model":  { "reasoning": false, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 32000 }
+  "gpt-5.6-sol":    { "contextWindow": 1100000, "maxTokens": 128000, "defaultThinkingLevel": "high" },
+  "some-new-model": { "reasoning": false, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 32000 }
 }
 ```
 
-Each key is a model id; each value may set any of `reasoning`, `input`,
-`contextWindow`, `maxTokens`, `name`, `cost`, `thinkingLevelMap`.
+Each key is a model id; each value may set any of `reasoning`,
+`defaultThinkingLevel` (`off`/`low`/`medium`/`high`), `input`, `contextWindow`,
+`maxTokens`, `vision`, `name`, `cost`, `thinkingLevelMap`.
 
 ## What it fixes
 
