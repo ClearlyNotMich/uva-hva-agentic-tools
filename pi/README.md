@@ -1,13 +1,13 @@
 # Pi extension (uva-hva-ai-coding)
 
-> Part of [uva-hva-ai-coding](../README.md). This is the **Pi** guide; for other
+> Part of [uva-hva-ai-coding](../README.md). This is the Pi guide; for other
 > tools see [Claude Code](../claude-code/README.md),
 > [VS Code](../vscode/README.md), [OpenCode](../opencode/README.md),
 > [Aider](../aider/README.md), [Kilo Code](../kilo-code/README.md),
 > [Factory Droid](../factory-droid/README.md), or
 > [Odysseus](../odysseus/README.md).
 
-A [Pi](https://pi.dev) coding-agent **provider extension** for the University of
+A [Pi](https://pi.dev) coding-agent provider extension for the University of
 Amsterdam / Amsterdam University of Applied Sciences LiteLLM proxies
 (`https://llmproxy.uva.nl/v1`, `https://llmproxy.hva.nl/v1`).
 
@@ -27,7 +27,7 @@ You need Pi installed and a UvA/HvA proxy API key.
 
 Pick one:
 
-- **Load it always:** clone the repo and add the `pi/` folder to
+- Load it always: clone the repo and add the `pi/` folder to
   `~/.pi/agent/settings.json`:
   ```jsonc
   {
@@ -36,8 +36,8 @@ Pick one:
     ]
   }
   ```
-- **Try it once:** `pi -e /path/to/uva-hva-ai-coding/pi`
-- **Auto-load folder:** copy `index.ts` to `~/.pi/agent/extensions/`.
+- Try it once: `pi -e /path/to/uva-hva-ai-coding/pi`
+- Auto-load folder: copy `index.ts` to `~/.pi/agent/extensions/`.
 
 ### 2. Connect with `/login`
 
@@ -47,7 +47,7 @@ Start Pi and run:
 /login
 ```
 
-Choose **"UvA / HvA proxy"**, pick a base URL (UvA / HvA / custom), and paste
+Choose "UvA / HvA proxy", pick a base URL (UvA / HvA / custom), and paste
 your API key. The extension discovers every model and saves your base URL + key
 to `~/.pi/agent/openai-responses-uva.json`, so the next launch reconnects with
 nothing re-entered. `/uva-login` runs the same flow.
@@ -61,8 +61,8 @@ nothing re-entered. `/uva-login` runs the same flow.
 /models          # select any discovered model
 ```
 
-Reasoning models default to **thinking ON**: `-sol` at **high**, the rest at
-**medium**. Or from the CLI:
+Reasoning models default to thinking ON: `-sol` at high, the rest at
+medium. Or from the CLI:
 
 ```bash
 pi --provider uva --model gpt-5.6-sol --thinking high -p "hello"
@@ -87,14 +87,14 @@ variables (all optional):
 Capabilities come from the proxy metadata (with a name-table fallback). To pin a
 value yourself there are two ways.
 
-**Interactive menu (easiest):** run `/configure-models`. Pick a model, then set
+Interactive menu (easiest): run `/configure-models`. Pick a model, then set
 its context window and max output (type the number), toggle reasoning on/off,
 and choose the default thinking level applied when that model is selected. Two
-options at the end, **Save & apply changes** and **Discard & exit**. Saved
+options at the end, Save & apply changes and Discard & exit. Saved
 overrides are written to `~/.pi/agent/openai-responses-uva.models.json` and
 applied live (and on every future launch).
 
-**By hand:** point `UVA_MODEL_OVERRIDES_FILE` at a JSON file (this overrides the
+By hand: point `UVA_MODEL_OVERRIDES_FILE` at a JSON file (this overrides the
 default path above):
 
 ```json
@@ -110,16 +110,16 @@ Each key is a model id; each value may set any of `reasoning`,
 
 ## What it fixes
 
-The proxy speaks the OpenAI **Responses API** (`/v1/responses`), and reasoning
+The proxy speaks the OpenAI Responses API (`/v1/responses`), and reasoning
 models require `reasoning.effort`, which the proxy only accepts there, not on
 `/v1/chat/completions`. But on the Responses API this proxy has two rough edges:
 
-- **Empty tool turns.** When tool definitions are present (i.e. every agent
+- Empty tool turns. When tool definitions are present (i.e. every agent
   turn) it collapses the SSE stream to a single terminal `response.completed`
   event and drops the incremental deltas, so Pi's built-in parser builds an
-  **empty** reply with no error. This extension reconciles the terminal
+  empty reply with no error. This extension reconciles the terminal
   `response.output[]` so nothing is lost.
-- **Gateway 504 on long reasoning.** Reasoning turns buffer server-side with no
+- Gateway 504 on long reasoning. Reasoning turns buffer server-side with no
   interim bytes, so streaming them can trip an nginx 504. Those turns are
   reissued via `background:true` + polling, where each request is short and the
   timeout can't fire.
@@ -131,9 +131,9 @@ is the fix, and adds `/login`, model auto-discovery, and the thinking defaults.
 
 For each turn the custom stream handler:
 
-1. Lets Pi's **pristine built-in `openai-responses` handler** build the exact
+1. Lets Pi's pristine built-in `openai-responses` handler build the exact
    request params (full message + tool conversion, reasoning, caching) via an
-   `onPayload` hook that captures the params and throws **before** the network
+   `onPayload` hook that captures the params and throws before the network
    call, so nothing extra is billed.
 2. Reissues the request itself and synthesizes Pi's content events
    (`text` / `thinking` / `toolCall`), reconciling the incremental SSE events
@@ -142,9 +142,9 @@ For each turn the custom stream handler:
 
 Two dispatch paths keep it reliable:
 
-- **Non-reasoning turns stream** (`stream:true`): bytes flow, so the nginx
+- Non-reasoning turns stream (`stream:true`): bytes flow, so the nginx
   gateway read-timeout keeps resetting and output is token-by-token.
-- **Reasoning turns use background + poll** (`background:true` +
+- Reasoning turns use background + poll (`background:true` +
   `GET /responses/{id}`): the model can buffer its whole reasoning phase with
   zero interim bytes without ever tripping a 504, because each request is short.
   A streaming turn that still hits a gateway 5xx before any output falls back to
@@ -163,13 +163,13 @@ endpoint from the backend (`azure`/`bedrock` speak the Responses API;
 open-weight `openai`/vLLM models use chat-completions). If that metadata
 endpoint is ever unavailable it falls back to `/v1/models` plus a researched
 name table, and if a model is still mis-routed, a Responses turn that 404s is
-**self-healed** at runtime (retried on chat-completions and remembered). So even
+self-healed at runtime (retried on chat-completions and remembered). So even
 if every current model is replaced with new ones, discovery, capabilities, and
 routing keep working with no code change.
 
 ### Trade-off
 
-Reasoning replies are **not** token-by-token; they appear at once on completion
+Reasoning replies are not token-by-token; they appear at once on completion
 (the proxy only delivers background results as a single terminal payload).
 Non-reasoning turns stream normally.
 
@@ -178,8 +178,8 @@ Non-reasoning turns stream normally.
 Reasoning is enabled per model from the proxy metadata (`supports_reasoning` or a
 `reasoning_effort` parameter), with the name table as a fallback, but only on the
 Responses route (chat-completions rejects `reasoning_effort` alongside tools).
-Reasoning models default to thinking ON: any `-sol` model at **high**, the rest
-at **medium** (disable with `UVA_NO_AUTO_THINKING=1`). Override any model's
+Reasoning models default to thinking ON: any `-sol` model at high, the rest
+at medium (disable with `UVA_NO_AUTO_THINKING=1`). Override any model's
 capabilities per-id via `UVA_MODEL_OVERRIDES_FILE`.
 
 ## Compatibility
@@ -246,7 +246,7 @@ alongside this provider, grouped by what they do, with install commands below.
 Pi auto-installs anything listed in the `packages` array of
 `~/.pi/agent/settings.json` on the next launch, with no manual `npm install`.
 
-**All at once:** merge this into your `packages` array (keep any entries you
+All at once: merge this into your `packages` array (keep any entries you
 already have), then restart Pi:
 
 ```jsonc
@@ -279,7 +279,7 @@ already have), then restart Pi:
 }
 ```
 
-**One by one:** add a single line to the same `packages` array and restart Pi.
+One by one: add a single line to the same `packages` array and restart Pi.
 Each entry is just `"npm:<name>"`, e.g.:
 
 ```jsonc
@@ -294,7 +294,7 @@ Most of these are pure extensions that work the moment they're in `packages`. A
 few run a background database or service and need one extra thing to work on a
 single install:
 
-- **Node ≥ 22.5.0, required by `context-mode`.** It stores its knowledge base in
+- Node ≥ 22.5.0, required by `context-mode`. It stores its knowledge base in
   SQLite and relies on Node's built-in `node:sqlite` (older Node falls back to a
   native module that can crash). Check with `node -v`. Its `postinstall`
   auto-wires the Pi hooks and heals the native binding, so no manual setup is
@@ -302,16 +302,16 @@ single install:
   `npx context-mode doctor`). If an install ever complains about
   `better-sqlite3`, upgrading Node to 22.5+ is the fix.
 
-- **`gentle-engram` needs the Engram backend.** The npm package is only the Pi
+- `gentle-engram` needs the Engram backend. The npm package is only the Pi
   bridge: persistence is handled by a separate `engram` binary that it launches
   as an MCP server. Install Engram from
   [Gentleman-Programming/engram](https://github.com/Gentleman-Programming/engram)
   and make sure `engram` is on your `PATH` (or set `ENGRAM_BIN`); otherwise the
-  memory tools load but nothing is saved. Also keep only **one** engram entry in
+  memory tools load but nothing is saved. Also keep only one engram entry in
   `packages`: `npm:gentle-engram`, not a second pinned copy like
   `npm:gentle-engram@0.1.8`.
 
-- **`pi-lean-ctx` installs a shell allowlist.** It routes `bash`/`read`/`grep`/
+- `pi-lean-ctx` installs a shell allowlist. It routes `bash`/`read`/`grep`/
   `find`/`ls` through lean-ctx (big token savings) and runs an embedded MCP
   bridge by default. It vendors its own binary (no separate install), but its
   security allowlist can block some shell commands (e.g. `node -e`, certain glob

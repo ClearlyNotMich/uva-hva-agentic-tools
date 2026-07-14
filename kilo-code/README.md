@@ -11,16 +11,16 @@ docs.
 
 ## Setup (VS Code)
 
-1. Open Kilo Code's **Settings** (gear icon) and go to the **Providers** tab.
-2. Scroll to the bottom and click **Custom provider**.
+1. Open Kilo Code's Settings (gear icon) and go to the Providers tab.
+2. Scroll to the bottom and click Custom provider.
 3. Fill in the dialog:
-   - **Provider ID:** `uva` (or `hva`)
-   - **Display name:** `UvA proxy`
-   - **Provider API:** see the table below for which to pick
-   - **Base URL:** `https://llmproxy.uva.nl/v1` (or `https://llmproxy.hva.nl/v1`)
-   - **API key:** your proxy key
-   - **Models:** Kilo auto-fetches the list from `/v1/models`; pick the ones you want
-4. Click **Submit**. The models appear in the model picker.
+   - Provider ID: `uva` (or `hva`)
+   - Display name: `UvA proxy`
+   - Provider API: see the table below for which to pick
+   - Base URL: `https://llmproxy.uva.nl/v1` (or `https://llmproxy.hva.nl/v1`)
+   - API key: your proxy key
+   - Models: Kilo auto-fetches the list from `/v1/models`; pick the ones you want
+4. Click Submit. The models appear in the model picker.
 
 ### Which "Provider API" to choose
 
@@ -33,7 +33,7 @@ reasoning and tools behave:
 | OpenAI reasoning (`gpt-5.x`, `o*`) | **OpenAI Responses** | `https://llmproxy.uva.nl/v1` |
 | Anthropic (`claude-*`) | **Anthropic Messages** | `https://llmproxy.uva.nl` |
 
-Using **OpenAI Responses** for the GPT-5.x reasoning models is what lets
+Using OpenAI Responses for the GPT-5.x reasoning models is what lets
 `reasoning_effort` work together with tool calls (the plain OpenAI Compatible
 path rejects that combination). You can add more than one custom provider, one
 per API shape, and mix their models freely.
@@ -62,16 +62,16 @@ docs for per-model options (token limits, tool calling).
 
 ## Notes
 
-- **Automatic model detection:** once the Base URL and key are valid, Kilo
+- Automatic model detection: once the Base URL and key are valid, Kilo
   queries `/v1/models` and offers a searchable picker, so you rarely type ids by
   hand.
-- **Key handling:** in VS Code the key is stored by the extension; in the CLI
+- Key handling: in VS Code the key is stored by the extension; in the CLI
   keep it in `{env:...}`, not inline.
-- **Timeouts:** raise the CLI `timeout` for long reasoning turns.
+- Timeouts: raise the CLI `timeout` for long reasoning turns.
 
 ## Troubleshooting
 
-- **Invalid API key:** re-check the key in the provider dialog.
-- **Model not found:** use an id from `/v1/models`.
-- **A GPT-5.x model errors with tools on "OpenAI Compatible":** switch that
-  provider's API to **OpenAI Responses**.
+- Invalid API key: re-check the key in the provider dialog.
+- Model not found: use an id from `/v1/models`.
+- A GPT-5.x model errors with tools on "OpenAI Compatible": switch that
+  provider's API to OpenAI Responses.

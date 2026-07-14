@@ -1,9 +1,9 @@
 # uva-hva-ai-coding
 
-Use the **UvA / HvA LLM proxy** with your favourite agentic coding tools.
+Use the UvA / HvA LLM proxy with your favourite agentic coding tools.
 
-For students, staff, and developers at the **University of Amsterdam (UvA)** and
-the **Amsterdam University of Applied Sciences (HvA)**. The universities run a
+For students, staff, and developers at the University of Amsterdam (UvA) and
+the Amsterdam University of Applied Sciences (HvA). The universities run a
 shared [LiteLLM](https://litellm.ai) gateway that exposes GPT, Claude, and
 open-weight models behind one API key. This repo collects short, copy-paste
 setup guides for wiring that gateway into the coding assistants people actually
@@ -13,8 +13,8 @@ use, plus a ready-made Pi extension.
 
 You need a key for the proxy before anything below works.
 
-- **Base URLs:** `https://llmproxy.uva.nl` (UvA) or `https://llmproxy.hva.nl` (HvA)
-- **Getting a key:** request one from your faculty IT / the proxy administrators.
+- Base URLs: `https://llmproxy.uva.nl` (UvA) or `https://llmproxy.hva.nl` (HvA)
+- Getting a key: request one from your faculty IT / the proxy administrators.
 
 Keep your key private. None of the guides below commit it to disk in plain text
 beyond the tool's own secret storage or an environment variable you control.

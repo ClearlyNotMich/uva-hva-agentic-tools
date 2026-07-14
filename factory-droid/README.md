@@ -1,6 +1,6 @@
 # Factory Droid + UvA / HvA proxy
 
-[Factory](https://factory.ai)'s **Droid** CLI supports Bring Your Own Key
+[Factory](https://factory.ai)'s Droid CLI supports Bring Your Own Key
 (BYOK): you add custom models in a JSON settings file and switch to them with
 `/model`. Its `provider` field maps cleanly onto the proxy's endpoints.
 
@@ -9,13 +9,13 @@ Based on the official
 
 ## Setup
 
-1. **Set your key as an environment variable:**
+1. Set your key as an environment variable:
 
    ```bash
    export UVA_API_KEY="YOUR_PROXY_KEY"          # or HVA_API_KEY
    ```
 
-2. **Add custom models** to `~/.factory/settings.json` under `customModels`.
+2. Add custom models to `~/.factory/settings.json` under `customModels`.
    Choose the `provider` per model so the right endpoint is used:
 
    ```json
@@ -49,7 +49,7 @@ Based on the official
    }
    ```
 
-3. **Run `droid`** and pick a model with `/model`. Custom models appear in their
+3. Run `droid` and pick a model with `/model`. Custom models appear in their
    own section. Config changes are picked up automatically (file watching), no
    restart needed.
 
@@ -76,17 +76,17 @@ curl -s https://llmproxy.uva.nl/v1/models \
 
 ## Notes
 
-- **`apiKey` env expansion** (`${UVA_API_KEY}`) works in `settings.json` and
+- `apiKey` env expansion (`${UVA_API_KEY}`) works in `settings.json` and
   `settings.local.json`, so you do not store the key in the file.
-- **Optional fields:** `noImageSupport`, `extraArgs` (for example
+- Optional fields: `noImageSupport`, `extraArgs` (for example
   `temperature`), and `extraHeaders` are available per model.
-- **`maxOutputTokens`** is optional but recommended so responses are not clipped.
+- `maxOutputTokens` is optional but recommended so responses are not clipped.
 
 ## Troubleshooting
 
-- **Model not appearing:** check JSON syntax and that all required fields
+- Model not appearing: check JSON syntax and that all required fields
   (`model`, `baseUrl`, `apiKey`, `provider`) are present.
-- **"Invalid provider":** `provider` must be exactly `anthropic`, `openai`, or
+- "Invalid provider": `provider` must be exactly `anthropic`, `openai`, or
   `generic-chat-completion-api`.
-- **Authentication errors:** verify the key and that `baseUrl` matches the table
+- Authentication errors: verify the key and that `baseUrl` matches the table
   above.

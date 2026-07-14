@@ -35,12 +35,12 @@ Native, GPU, Windows, and macOS instructions are in the official
 ## Connect the proxy
 
 Odysseus adds providers from inside the app. After you log in, either type
-`/setup` in the chat or open **Settings** and add an AI endpoint, then supply:
+`/setup` in the chat or open Settings and add an AI endpoint, then supply:
 
-- **Provider type:** OpenAI-compatible (Odysseus connects to Ollama, vLLM, and
+- Provider type: OpenAI-compatible (Odysseus connects to Ollama, vLLM, and
   other OpenAI-compatible endpoints the same way)
-- **Base URL:** `https://llmproxy.uva.nl/v1` (or `https://llmproxy.hva.nl/v1`)
-- **API key:** your proxy key
+- Base URL: `https://llmproxy.uva.nl/v1` (or `https://llmproxy.hva.nl/v1`)
+- API key: your proxy key
 
 Once saved, the proxy's models become selectable in chat and agents.
 
@@ -48,7 +48,7 @@ Once saved, the proxy's models become selectable in chat and agents.
 
 Odysseus runs a lot of model calls in the background (email triage and
 summaries, research steps, note and task automation, chat). Those add up on the
-commercial models, so default to the **cheap open-weight models hosted on SURF**
+commercial models, so default to the cheap open-weight models hosted on SURF
 and keep the pricier GPT / Claude models for the hard problems.
 
 Set your default model to one of these (all low-cost, served through the same
@@ -76,21 +76,21 @@ curl -s https://llmproxy.uva.nl/v1/models \
 
 ## Notes
 
-- **Self-hosted trust:** Odysseus has powerful local tools (shell, files, MCP).
+- Self-hosted trust: Odysseus has powerful local tools (shell, files, MCP).
   Keep authentication enabled and do not expose the port publicly. See the
   project's `SECURITY.md`.
-- **Endpoint behaviour:** the OpenAI-compatible provider uses
+- Endpoint behaviour: the OpenAI-compatible provider uses
   `/v1/chat/completions`. That is fine for chat and Claude models; OpenAI GPT
   reasoning models (`gpt-5.x`) can reject `reasoning_effort` together with tool
   calls on that endpoint. If you hit that in an agent flow, use a Claude or a
   non-reasoning model, or drive those models through [Pi](../pi/README.md).
-- **Corporate TLS:** if your setup uses an internal CA, Odysseus supports an
+- Corporate TLS: if your setup uses an internal CA, Odysseus supports an
   extra CA bundle via `LLM_CA_BUNDLE` in `.env`.
 
 ## Troubleshooting
 
-- **Endpoint shows offline:** confirm the base URL is reachable and ends in
+- Endpoint shows offline: confirm the base URL is reachable and ends in
   `/v1`, and that the key is correct.
-- **No models listed:** enter model ids by hand from the `curl` output above.
-- **First login:** the admin password is only in `docker compose logs odysseus`
+- No models listed: enter model ids by hand from the `curl` output above.
+- First login: the admin password is only in `docker compose logs odysseus`
   on first boot.
