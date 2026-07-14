@@ -225,6 +225,7 @@ alongside this provider, grouped by what they do, with install commands below.
 | --- | --- |
 | [pi-simplify](https://github.com/MattDevy/pi-extensions/tree/main/packages/pi-simplify) | Reviews recently changed code for clarity, consistency, and maintainability. |
 | [pi-rtk-optimizer](https://github.com/MasuRii/pi-rtk-optimizer) | Optimizes RTK command rewriting and tool-output compaction. |
+| [ponytail](https://github.com/DietrichGebert/ponytail) | Lazy senior dev mode: stops the agent over-engineering and writes the minimum code that works, with `/ponytail` review/audit/debt commands. |
 
 ### Install them
 
@@ -259,7 +260,8 @@ already have), then restart Pi:
     "npm:@juicesharp/rpiv-args",
     "npm:@juicesharp/rpiv-i18n",
     "npm:pi-simplify",
-    "npm:pi-rtk-optimizer"
+    "npm:pi-rtk-optimizer",
+    "npm:opencode-ponytail"
   ]
 }
 ```
@@ -307,7 +309,7 @@ single install:
 > Some of these overlap in purpose (multiple planners/workflow engines, several
 > compaction strategies, and both `context-mode` and `pi-lean-ctx` wrap tool
 > output). Start with the context/memory group, then add planning and tools as
-> you need them rather than enabling all 25 at once.
+> you need them rather than enabling all of them at once.
 
 ## License
 
