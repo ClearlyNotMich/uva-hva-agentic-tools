@@ -1,6 +1,4 @@
-# uva-hva-ai-coding
-
-Use the UvA / HvA LLM proxy with your favourite agentic coding tools.
+# Use the UvA / HvA AI with your favourite agentic tools!
 
 For students, staff, and developers at the University of Amsterdam (UvA) and
 the Amsterdam University of Applied Sciences (HvA). The universities run a
