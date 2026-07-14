@@ -52,8 +52,9 @@
  * The base URL + key are saved to ~/.pi/agent/openai-responses-uva.json so the
  * next launch reconnects with nothing re-entered. Then pick a model via /models.
  *
- * Reasoning models default to thinking ON, `-sol` at high, the rest at medium
- * (set UVA_NO_AUTO_THINKING=1 to disable this).
+ * Reasoning models default to thinking ON at medium
+ * (set UVA_NO_AUTO_THINKING=1 to disable this; change any model's default in
+ * /configure-models).
  *
  * Config (environment variables, all optional; /login is the easy path)
  * ---------------------------------------------------------------------
@@ -61,7 +62,7 @@
  *   UVA_BASE_URL          Default: https://llmproxy.uva.nl/v1
  *   UVA_PROVIDER_ID       Provider id in /models. Default: uva
  *   UVA_CREDENTIALS_FILE  Override the saved-credentials path.
- *   UVA_NO_AUTO_THINKING  Set to disable the sol=high / rest=medium defaults.
+ *   UVA_NO_AUTO_THINKING  Set to disable the medium thinking default.
  *
  * Only imports the aliased root "@earendil-works/pi-ai" (the extension-facing
  * compat surface), so it works under Pi's jiti extension loader.
@@ -115,10 +116,6 @@ function saveCreds(creds: { baseUrl: string; apiKey: string }): void {
   } catch {
     /* ignore */
   }
-}
-
-function isSolModel(id: string): boolean {
-  return /(^|[-_])sol($|[-_.])/i.test(id);
 }
 
 // Models that are not chat/response models, never register these.
@@ -1085,14 +1082,14 @@ function makeOAuth(pi: ExtensionAPI) {
   };
 }
 
-// Enforce the preferred defaults: thinking ON, sol=high, other reasoning models
-// =medium. Applied whenever a UvA reasoning model becomes active. Disable with
-// UVA_NO_AUTO_THINKING=1.
+// Enforce the preferred default: thinking ON at medium for reasoning models.
+// Applied whenever a UvA reasoning model becomes active. Disable with
+// UVA_NO_AUTO_THINKING=1. A per-model default (set in /configure-models) wins.
 function applyThinkingDefault(pi: ExtensionAPI, model: any): void {
   if (process.env.UVA_NO_AUTO_THINKING) return;
   if (!model || model.provider !== PROVIDER_ID || !model.reasoning) return;
   const ov = loadOverrides()[model.id] || {};
-  const level = ov.defaultThinkingLevel || (isSolModel(model.id) ? "high" : "medium");
+  const level = ov.defaultThinkingLevel || "medium";
   try {
     pi.setThinkingLevel(level);
   } catch {
@@ -1111,7 +1108,7 @@ async function configureOneModel(ctx: any, id: string, draft: Record<string, any
   while (true) {
     const reasoning = eff("reasoning", def?.reasoning ?? false);
     const visionOn = eff("vision", (def?.input || []).includes("image"));
-    const defLevel = eff("defaultThinkingLevel", isSolModel(id) ? "high" : reasoning ? "medium" : "n/a");
+    const defLevel = eff("defaultThinkingLevel", reasoning ? "medium" : "n/a");
     const items = [
       `Context window: ${eff("contextWindow", def?.contextWindow ?? "?")}`,
       `Max output tokens: ${eff("maxTokens", def?.maxTokens ?? "?")}`,
@@ -1121,7 +1118,7 @@ async function configureOneModel(ctx: any, id: string, draft: Record<string, any
       RESET,
       BACK,
     ];
-    const pick = await ctx.ui.select(`${id} \u2014 pick a setting to change`, items);
+    const pick = await ctx.ui.select(`${id} - pick a setting to change`, items);
     if (pick === undefined || pick === BACK) return;
     if (pick === RESET) {
       delete draft[id];
@@ -1129,23 +1126,23 @@ async function configureOneModel(ctx: any, id: string, draft: Record<string, any
       return;
     }
     if (pick.startsWith("Context window")) {
-      const v = await ctx.ui.input(`${id} \u2014 context window (tokens)`, String(eff("contextWindow", def?.contextWindow ?? "")));
+      const v = await ctx.ui.input(`${id} - context window (tokens)`, String(eff("contextWindow", def?.contextWindow ?? "")));
       const n = num(v);
       if (Number.isFinite(n) && n > 0) ov.contextWindow = n;
       else if (v !== undefined) ctx.ui.notify("Enter a positive integer.", "warning");
     } else if (pick.startsWith("Max output")) {
-      const v = await ctx.ui.input(`${id} \u2014 max output tokens`, String(eff("maxTokens", def?.maxTokens ?? "")));
+      const v = await ctx.ui.input(`${id} - max output tokens`, String(eff("maxTokens", def?.maxTokens ?? "")));
       const n = num(v);
       if (Number.isFinite(n) && n > 0) ov.maxTokens = n;
       else if (v !== undefined) ctx.ui.notify("Enter a positive integer.", "warning");
     } else if (pick.startsWith("Reasoning:")) {
-      const v = await ctx.ui.select(`${id} \u2014 reasoning (thinking) support`, ["on", "off"]);
+      const v = await ctx.ui.select(`${id} - reasoning (thinking) support`, ["on", "off"]);
       if (v) ov.reasoning = v === "on";
     } else if (pick.startsWith("Default thinking")) {
-      const v = await ctx.ui.select(`${id} \u2014 default thinking level when selected`, ["off", "low", "medium", "high"]);
+      const v = await ctx.ui.select(`${id} - default thinking level when selected`, ["off", "low", "medium", "high"]);
       if (v) ov.defaultThinkingLevel = v;
     } else if (pick.startsWith("Vision")) {
-      const v = await ctx.ui.select(`${id} \u2014 vision (image input)`, ["on", "off"]);
+      const v = await ctx.ui.select(`${id} - vision (image input)`, ["on", "off"]);
       if (v) ov.vision = v === "on";
     }
   }
@@ -1158,7 +1155,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
 
   registerProviderNow(pi, await buildModels(activeApiKey, activeBaseUrl), activeBaseUrl);
 
-  // Default thinking level (sol=high, rest=medium) on selection and at startup.
+  // Default thinking level (medium) on selection and at startup.
   pi.on("model_select", (event: any) => applyThinkingDefault(pi, event?.model));
   pi.on("session_start", (_event: any, ctx: any) => applyThinkingDefault(pi, ctx?.model));
 
@@ -1202,7 +1199,7 @@ export default async function (pi: ExtensionAPI): Promise<void> {
         return;
       }
       if (!currentModels.length) {
-        ctx.ui.notify("No models loaded yet \u2014 run /login (or set UVA_API_KEY) first.", "error");
+        ctx.ui.notify("No models loaded yet - run /login (or set UVA_API_KEY) first.", "error");
         return;
       }
       const draft: Record<string, any> = JSON.parse(JSON.stringify(loadOverrides()));

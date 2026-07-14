@@ -15,7 +15,7 @@ Get every UvA/HvA model working in Pi in under a minute, without editing Pi's co
 files. Load the extension, run `/login`, pick your proxy, paste your API key, and
 it auto-discovers all available models so you can select one straight from
 `/models`. Your base URL and key are saved, so the next launch just reconnects.
-Reasoning models come pre-tuned (thinking on, `sol` at high, the rest at medium),
+Reasoning models come pre-tuned (thinking on at medium),
 and tool-heavy agent turns that would otherwise silently come back empty on this
 proxy just work. That's the whole setup; everything below is optional detail.
 
@@ -61,8 +61,8 @@ nothing re-entered. `/uva-login` runs the same flow.
 /models          # select any discovered model
 ```
 
-Reasoning models default to thinking ON: `-sol` at high, the rest at
-medium. Or from the CLI:
+Reasoning models default to thinking ON at medium. You can raise or lower a
+model's default in `/configure-models`, or set the level per run from the CLI:
 
 ```bash
 pi --provider uva --model gpt-5.6-sol --thinking high -p "hello"
@@ -79,7 +79,7 @@ variables (all optional):
 | `UVA_BASE_URL` | `https://llmproxy.uva.nl/v1` | Proxy base URL (must end at the `/v1` root). |
 | `UVA_PROVIDER_ID` | `uva` | Provider id shown in `/models` and `--provider`. |
 | `UVA_CREDENTIALS_FILE` | `~/.pi/agent/openai-responses-uva.json` | Override the saved-credentials path. |
-| `UVA_NO_AUTO_THINKING` | - | Set to disable the sol=high / rest=medium defaults. |
+| `UVA_NO_AUTO_THINKING` | - | Set to disable the medium thinking default. |
 | `UVA_MODEL_OVERRIDES_FILE` | - | Path to a JSON file overriding per-model capabilities (below). |
 
 ### Per-model overrides
@@ -103,6 +103,9 @@ default path above):
   "some-new-model": { "reasoning": false, "input": ["text", "image"], "contextWindow": 200000, "maxTokens": 32000 }
 }
 ```
+
+The `defaultThinkingLevel` on `gpt-5.6-sol` above is just an example of pinning
+one model to `high`; by default every reasoning model starts at `medium`.
 
 Each key is a model id; each value may set any of `reasoning`,
 `defaultThinkingLevel` (`off`/`low`/`medium`/`high`), `input`, `contextWindow`,
@@ -159,9 +162,10 @@ Non-reasoning turns stream normally.
 Reasoning is enabled per model from the proxy metadata (`supports_reasoning` or a
 `reasoning_effort` parameter), with the name table as a fallback, but only on the
 Responses route (chat-completions rejects `reasoning_effort` alongside tools).
-Reasoning models default to thinking ON: any `-sol` model at high, the rest
-at medium (disable with `UVA_NO_AUTO_THINKING=1`). Override any model's
-capabilities per-id via `UVA_MODEL_OVERRIDES_FILE`.
+Reasoning models default to thinking ON at medium (disable with
+`UVA_NO_AUTO_THINKING=1`). Override any model's capabilities, including its
+default thinking level, per-id via `UVA_MODEL_OVERRIDES_FILE` or
+`/configure-models`.
 
 ## Compatibility
 
