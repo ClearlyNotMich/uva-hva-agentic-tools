@@ -184,6 +184,7 @@ alongside this provider, grouped by what they do, with install commands below.
 | --- | --- |
 | [pi-lean-ctx](https://leanctx.com) | Routes `bash`/`read`/`grep`/`find`/`ls` through lean-ctx for big token savings, plus an embedded MCP bridge. |
 | [context-mode](https://github.com/mksglu/context-mode) | Offloads large tool/command output into a sandbox so it never floods your context window. |
+| [@hypabolic/pi-hypa](https://github.com/Hypabolic/Hypa/tree/main/packages/pi-hypa) | Rewrites shell commands through Hypa, a local context runtime, to compress noisy tool output before it reaches the context window. |
 | [pi-smart-compact](https://github.com/alpertarhan/pi-smart-compact) | Verification-oriented smart compaction: deterministic extraction, synthesis, and metrics. |
 | [gentle-engram](https://github.com/Gentleman-Programming/engram) | Persistent memory shared across sessions, compactions, and MCP agents. |
 
@@ -240,6 +241,7 @@ already have), then restart Pi:
   "packages": [
     "npm:pi-lean-ctx",
     "npm:context-mode",
+    "npm:@hypabolic/pi-hypa",
     "npm:pi-smart-compact",
     "npm:gentle-engram",
     "npm:@juicesharp/rpiv-pi",
