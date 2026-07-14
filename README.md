@@ -23,13 +23,17 @@ beyond the tool's own secret storage or an environment variable you control.
 
 | Tool | How it connects | Best for | Guide |
 | --- | --- | --- | --- |
-| **Claude Code** | Native Anthropic endpoint, env vars, zero config files | Fastest setup; Claude models | [docs/claude-code.md](docs/claude-code.md) |
-| **Pi** | Provider extension (handles every quirk) | All models + reasoning, terminal-native | [pi/README.md](pi/README.md) |
-| **VS Code (Copilot Chat)** | LiteLLM provider extension | In-editor chat inside the IDE you already use | [docs/vscode.md](docs/vscode.md) |
-| **OpenCode** | OpenAI-compatible provider | Terminal agent, config-file driven | [docs/opencode.md](docs/opencode.md) |
+| **Claude Code** | Native Anthropic endpoint, env vars, zero config files | Fastest setup; Claude models | [docs/claude-code/](docs/claude-code/README.md) |
+| **Pi** | Provider extension (handles every quirk) | All models + reasoning, terminal-native | [pi/](pi/README.md) |
+| **VS Code (Copilot Chat)** | LiteLLM provider extension | In-editor chat inside the IDE you already use | [docs/vscode/](docs/vscode/README.md) |
+| **OpenCode** | OpenAI-compatible provider | Terminal agent, config-file driven | [docs/opencode/](docs/opencode/README.md) |
+| **Aider** | OpenAI-compatible env vars | Terminal pair-programming | [docs/aider/](docs/aider/README.md) |
+| **Kilo Code** | Custom provider (chat / responses / anthropic) | VS Code agent, picks the right endpoint per model | [docs/kilo-code/](docs/kilo-code/README.md) |
+| **Factory Droid** | BYOK custom models | Terminal agent, per-model endpoint control | [docs/factory-droid/](docs/factory-droid/README.md) |
+| **Odysseus** | Self-hosted, OpenAI-compatible provider | A full self-hosted AI workspace | [docs/odysseus/](docs/odysseus/README.md) |
 
 Any other tool that speaks the OpenAI or Anthropic API can point at the proxy
-too; see [docs/opencode.md](docs/opencode.md) for the generic pattern.
+too; see [docs/opencode/](docs/opencode/README.md) for the generic pattern.
 
 ## Which models are available
 
@@ -63,13 +67,17 @@ The per-tool guides note where this matters.
 
 ```
 .
-├── README.md            this landing page
-├── docs/
-│   ├── claude-code.md   Claude Code setup
-│   ├── opencode.md      OpenCode + generic OpenAI-compatible setup
-│   └── vscode.md        VS Code (Copilot Chat via the LiteLLM extension)
-└── pi/                  the Pi provider extension (installable package)
-    ├── README.md        full Pi extension docs
+├── README.md               this landing page
+├── docs/                   one folder per tool, each with a README.md
+│   ├── claude-code/        Claude Code (native Anthropic endpoint)
+│   ├── vscode/             VS Code Copilot Chat (LiteLLM extension)
+│   ├── opencode/           OpenCode + generic OpenAI-compatible pattern
+│   ├── aider/              Aider (terminal pair-programming)
+│   ├── kilo-code/          Kilo Code (VS Code agent)
+│   ├── factory-droid/      Factory Droid (BYOK)
+│   └── odysseus/           Odysseus (self-hosted workspace)
+└── pi/                     the Pi provider extension (installable package)
+    ├── README.md           full Pi extension docs
     ├── index.ts
     └── package.json
 ```

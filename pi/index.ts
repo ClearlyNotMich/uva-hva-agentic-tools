@@ -1,5 +1,5 @@
 /**
- * openai-responses-uva — a Pi coding-agent provider extension
+ * openai-responses-uva, a Pi coding-agent provider extension
  * ============================================================
  *
  * Registers the UvA LiteLLM proxy (https://llmproxy.uva.nl/v1) as a Pi model
@@ -18,7 +18,7 @@
  *
  * Pi's built-in Responses stream parser builds the assistant reply purely from
  * those incremental events; its terminal handler never harvests
- * `response.output[]`. So the assistant message ends up empty — no text, no
+ * `response.output[]`. So the assistant message ends up empty, no text, no
  * tool call, no error.
  *
  * The fix
@@ -28,7 +28,7 @@
  *   1. Lets Pi's pristine built-in `openai-responses` handler BUILD the exact
  *      request params (full message + tool conversion, reasoning, caching) via
  *      an `onPayload` hook that captures the params and throws BEFORE the
- *      network call — so nothing extra is billed.
+ *      network call, so nothing extra is billed.
  *   2. Reissues that request itself and synthesizes Pi's content events,
  *      reconciling the incremental SSE events with the terminal
  *      `response.output[]` so the collapsed tool call is never lost.
@@ -52,10 +52,10 @@
  * The base URL + key are saved to ~/.pi/agent/openai-responses-uva.json so the
  * next launch reconnects with nothing re-entered. Then pick a model via /models.
  *
- * Reasoning models default to thinking ON — `-sol` at high, the rest at medium
+ * Reasoning models default to thinking ON, `-sol` at high, the rest at medium
  * (set UVA_NO_AUTO_THINKING=1 to disable this).
  *
- * Config (environment variables — all optional; /login is the easy path)
+ * Config (environment variables, all optional; /login is the easy path)
  * ---------------------------------------------------------------------
  *   UVA_API_KEY           API key, if you prefer env over /login.
  *   UVA_BASE_URL          Default: https://llmproxy.uva.nl/v1
@@ -121,7 +121,7 @@ function isSolModel(id: string): boolean {
   return /(^|[-_])sol($|[-_.])/i.test(id);
 }
 
-// Models that are not chat/response models — never register these.
+// Models that are not chat/response models, never register these.
 const DENY = /embedding|whisper|audio|tts|speech|dall|(^|[-_])image|document-ai|ocr|rerank|moderation|guard|stable-diffusion/i;
 
 // Known-good fallback if /v1/models discovery fails.
@@ -132,9 +132,9 @@ const FALLBACK_MODEL_IDS = ["gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.5", "gpt-5.1",
 //
 // The primary source of truth is the proxy's own /model_group/info (real
 // context window, max output, reasoning/vision support, cost, backend). This
-// table only fills fields the proxy leaves blank — common for brand-new
+// table only fills fields the proxy leaves blank, common for brand-new
 // deployments whose metadata isn't populated yet (e.g. gpt-5.6-* report empty
-// token limits) — and is the whole story only if /model_group/info is
+// token limits), and is the whole story only if /model_group/info is
 // unavailable and discovery falls back to /v1/models (ids only).
 //
 // Values are researched per model family. Any positive signal (metadata OR this
@@ -167,7 +167,7 @@ const CAPS: Array<{ re: RegExp; caps: Caps }> = [
   { re: /claude-sonnet/i, caps: { ctx: 200_000, out: 64_000, reasoning: false, vision: true } },
   { re: /claude-haiku/i, caps: { ctx: 200_000, out: 64_000, reasoning: false, vision: true } },
   { re: /claude/i, caps: { ctx: 200_000, out: 64_000, reasoning: false, vision: true } },
-  // Qwen (VL = vision; Qwen3 text — thinking not exposed via responses effort)
+  // Qwen (VL = vision; Qwen3 text, thinking not exposed via responses effort)
   { re: /qwen.*vl|vl.*qwen/i, caps: { ctx: 128_000, out: 8_192, reasoning: false, vision: true } },
   { re: /qwen/i, caps: { ctx: 262_144, out: 32_768, reasoning: false, vision: false } },
   // Mistral (small 3.x is multimodal)
@@ -533,7 +533,7 @@ function sanitizeParamsForModel(modelId: string, params: any): any {
  * Translate one Responses SSE event into Pi events + block state.
  * Handles the full incremental event set (good streaming case) and records the
  * terminal `response.completed` payload (whose `output[]` is harvested by the
- * caller when the proxy sent no incremental events — the tools-collapse case).
+ * caller when the proxy sent no incremental events, the tools-collapse case).
  */
 function handleSseEvent(
   evt: any,
@@ -729,7 +729,7 @@ async function attemptStream(
   slots.clear();
 
   // Emit any terminal output[] items that never arrived as incremental events
-  // (full or partial collapse — e.g. Anthropic/Bedrock streams text but delivers
+  // (full or partial collapse, e.g. Anthropic/Bedrock streams text but delivers
   // the tool call only in the terminal payload).
   if (terminal) {
     reconcileTerminal(out, output, terminal, seenIds);
@@ -742,7 +742,7 @@ async function attemptStream(
  * Background + poll path. The POST returns immediately with a stored response
  * id (status `queued`/`in_progress`), then we poll `GET /responses/{id}` until
  * it finishes. Because every HTTP request is short, the nginx gateway
- * read-timeout can never fire — this is the reliable path for long reasoning
+ * read-timeout can never fire, this is the reliable path for long reasoning
  * turns that otherwise buffer server-side and 504.
  *
  * Trade-off: no token-by-token streaming (the proxy delivers background results
@@ -762,7 +762,7 @@ async function runBackgroundPoll(
   const authHeaders = { Authorization: `Bearer ${apiKey}` };
   const body = sanitizeParamsForModel(model.id, { ...params, background: true, store: true, stream: false });
 
-  // Enqueue (retry a couple times on gateway 5xx — the POST returns fast, so
+  // Enqueue (retry a couple times on gateway 5xx, the POST returns fast, so
   // this rarely trips).
   let data: any = null;
   for (let attempt = 0; ; attempt++) {
@@ -844,7 +844,7 @@ async function runBackgroundPoll(
     delay = Math.min(delay + 500, 3000);
   }
 
-  // Background responses carry no incremental events — emit the whole output[].
+  // Background responses carry no incremental events, emit the whole output[].
   reconcileTerminal(out, output, terminal, new Set());
   applyUsage(output, terminal, model);
   output.stopReason = mapStopReason(terminal.status);
@@ -882,7 +882,7 @@ async function pipeInto(out: any, src: any): Promise<void> {
 
 /** The replacement streamSimple for UvA models. */
 function uvaStreamSimple(model: any, context: any, options: any): any {
-  // Open-weight models only speak chat-completions — delegate straight to the
+  // Open-weight models only speak chat-completions, delegate straight to the
   // built-in handler (standard streaming, no Responses bug to work around).
   if (currentRoute(model.id) === "chat") {
     return chatDelegate(model, context, options);
@@ -1022,7 +1022,7 @@ function registerProviderNow(pi: ExtensionAPI, models: any[], baseUrl: string): 
 
 /**
  * OAuth-shaped config so the connect flow appears under `/login`. It isn't real
- * OAuth — we reuse the callback prompts to pick a base URL and paste an API key,
+ * OAuth, we reuse the callback prompts to pick a base URL and paste an API key,
  * then discover models and re-register the provider so `/models` fills in.
  */
 function makeOAuth(pi: ExtensionAPI) {
@@ -1032,8 +1032,8 @@ function makeOAuth(pi: ExtensionAPI) {
       const choice = await callbacks.onSelect({
         message: "Which proxy do you want to connect to?",
         options: [
-          { id: "uva", label: "UvA  —  llmproxy.uva.nl" },
-          { id: "hva", label: "HvA  —  llmproxy.hva.nl" },
+          { id: "uva", label: "UvA - llmproxy.uva.nl" },
+          { id: "hva", label: "HvA - llmproxy.hva.nl" },
           { id: "custom", label: "Custom base URL…" },
         ],
       });
@@ -1055,7 +1055,7 @@ function makeOAuth(pi: ExtensionAPI) {
 
       callbacks.onProgress?.("Discovering models…");
       const infos = await discoverModels(apiKey, baseUrl); // throws on a bad key/url -> login fails
-      callbacks.onProgress?.(`Connected — ${infos.length} models available.`);
+      callbacks.onProgress?.(`Connected, ${infos.length} models available.`);
 
       saveCreds({ baseUrl, apiKey });
       activeApiKey = apiKey;
@@ -1070,7 +1070,7 @@ function makeOAuth(pi: ExtensionAPI) {
       };
     },
     async refreshToken(cred: any): Promise<any> {
-      return cred; // static API key — nothing to refresh
+      return cred; // static API key, nothing to refresh
     },
     getApiKey(cred: any): string {
       if (cred?.baseUrl) activeBaseUrl = String(cred.baseUrl).replace(/\/+$/, "");
