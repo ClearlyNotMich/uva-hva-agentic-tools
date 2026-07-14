@@ -1,11 +1,11 @@
 # Pi extension (uva-hva-ai-coding)
 
 > Part of [uva-hva-ai-coding](../README.md). This is the **Pi** guide; for other
-> tools see [Claude Code](../docs/claude-code/README.md),
-> [VS Code](../docs/vscode/README.md), [OpenCode](../docs/opencode/README.md),
-> [Aider](../docs/aider/README.md), [Kilo Code](../docs/kilo-code/README.md),
-> [Factory Droid](../docs/factory-droid/README.md), or
-> [Odysseus](../docs/odysseus/README.md).
+> tools see [Claude Code](../claude-code/README.md),
+> [VS Code](../vscode/README.md), [OpenCode](../opencode/README.md),
+> [Aider](../aider/README.md), [Kilo Code](../kilo-code/README.md),
+> [Factory Droid](../factory-droid/README.md), or
+> [Odysseus](../odysseus/README.md).
 
 A [Pi](https://pi.dev) coding-agent **provider extension** for the University of
 Amsterdam / Amsterdam University of Applied Sciences LiteLLM proxies

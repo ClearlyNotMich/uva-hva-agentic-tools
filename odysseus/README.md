@@ -83,7 +83,7 @@ curl -s https://llmproxy.uva.nl/v1/models \
   `/v1/chat/completions`. That is fine for chat and Claude models; OpenAI GPT
   reasoning models (`gpt-5.x`) can reject `reasoning_effort` together with tool
   calls on that endpoint. If you hit that in an agent flow, use a Claude or a
-  non-reasoning model, or drive those models through [Pi](../../pi/README.md).
+  non-reasoning model, or drive those models through [Pi](../pi/README.md).
 - **Corporate TLS:** if your setup uses an internal CA, Odysseus supports an
   extra CA bundle via `LLM_CA_BUNDLE` in `.env`.
 
