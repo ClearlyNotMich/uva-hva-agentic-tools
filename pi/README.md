@@ -263,6 +263,7 @@ already have), then restart Pi:
     "npm:@juicesharp/rpiv-i18n",
     "npm:pi-simplify",
     "npm:opencode-ponytail"
+    "npm:pi-uva-hva"
   ]
 }
 ```
